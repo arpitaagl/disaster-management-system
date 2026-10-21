@@ -511,26 +511,37 @@ def render_chatbot(center: CommandCenter) -> None:
             st.session_state["resq_last_voice_id"] = voice_id
             prompt = str(voice_result["text"]).strip()
 
-  for item in history:
-    avatar = "🤖" if item["role"] == "assistant" else None
-    with st.chat_message(item["role"], avatar=avatar):
-        st.markdown(item["content"])
+    for item in history:
+        avatar = "🤖" if item["role"] == "assistant" else None
+        with st.chat_message(item["role"], avatar=avatar):
+            st.markdown(item["content"])
+
     if not history:
         st.markdown("**Try asking**")
         columns = st.columns(4)
-        for column, label, question in zip(columns, ("Highest priority?", "Shelter capacity", "Resource status", "Earthquake safety"),
-                                          ("Which incident is most urgent?", "Which shelters have space?", "Which rescue resources are available?", "What should I do during an earthquake?")):
+        for column, label, question in zip(
+            columns,
+            ("Highest priority?", "Shelter capacity", "Resource status", "Earthquake safety"),
+            (
+                "Which incident is most urgent?",
+                "Which shelters have space?",
+                "Which rescue resources are available?",
+                "What should I do during an earthquake?",
+            ),
+        ):
             if column.button(label, use_container_width=True):
                 prompt = question
+
     typed = st.chat_input("Ask ResQ about the current response plan…")
     if typed:
         prompt = typed
+
     if prompt:
         prior = history.copy()
         history.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
-       with st.chat_message("assistant", avatar="🤖"):
+        with st.chat_message("assistant", avatar="🤖"):
             with st.spinner("Checking the current response snapshot…"):
                 response = answer_question(prompt, center, prior)
             st.markdown(response)
