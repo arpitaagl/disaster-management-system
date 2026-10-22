@@ -25,6 +25,31 @@ st.caption(
 # It does not require Supabase or an inventory access token.
 
 
+@st.cache_data(ttl=3600, show_spinner=False)
+def _geocode_incident_location(address: str) -> tuple[float, float] | None:
+    """Resolve the saved user-entered place name."""
+    headers = {"User-Agent": "ResQ-AI disaster response prototype/1.0"}
+    try:
+        response = requests.get("https://photon.komoot.io/api/", params={"q": address, "limit": 1}, headers=headers, timeout=(3, 8))
+        response.raise_for_status()
+        features = response.json().get("features") or []
+        if features:
+            coords = features[0].get("geometry", {}).get("coordinates") or []
+            if len(coords) >= 2:
+                return float(coords[1]), float(coords[0])
+    except (requests.RequestException, ValueError, TypeError, IndexError):
+        pass
+    try:
+        response = requests.get("https://nominatim.openstreetmap.org/search", params={"q": address, "format": "jsonv2", "limit": 1}, headers=headers, timeout=(3, 8))
+        response.raise_for_status()
+        results = response.json()
+        if results:
+            return float(results[0]["lat"]), float(results[0]["lon"])
+    except (requests.RequestException, ValueError, TypeError, KeyError, IndexError):
+        pass
+    return None
+
+
 def _distance_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     radius = 6371.0
     p1, p2 = math.radians(lat1), math.radians(lat2)
@@ -140,11 +165,18 @@ try:
 except (TypeError, ValueError):
     people_label = str(people or "Not provided")
 lat, lon = incident.get("lat"), incident.get("lon")
-location = (
+location_text = str(incident.get("location_text") or "").strip()
+location = location_text or (
     f"{lat}, {lon}"
     if lat is not None and lon is not None
-    else "Location coordinates not available"
+    else "Location not available"
 )
+# Prefer the address typed by the reporter. Older reports without a saved address use coordinates.
+if location_text:
+    with st.spinner("Resolving the reported address for nearby-service search…"):
+        resolved = _geocode_incident_location(location_text)
+    if resolved:
+        lat, lon = resolved
 
 a, b, c, d = st.columns(4)
 score = incident.get("priority_score")
@@ -163,14 +195,14 @@ else:
 detail_left, detail_right = st.columns(2)
 with detail_left:
     st.markdown("**Reported location**")
-    st.write(location)
+    st.write(location_text if location_text else location)
 with detail_right:
     st.markdown("**Reported at**")
     st.write(str(incident.get("reported_at") or "Timestamp not available"))
 
 st.divider()
 st.markdown("### Nearby hospitals and emergency services")
-st.caption("Nearest first · distance is straight-line estimate. Public directory entries do not confirm live availability or dispatch readiness.")
+st.caption(f"Search location: {location_text or location} · nearest first · straight-line distance estimate. Public directory entries do not confirm live availability or dispatch readiness.")
 if lat is None or lon is None:
     st.warning("This incident has no usable coordinates. Reopen the report and enter its location before searching nearby services.")
 else:
