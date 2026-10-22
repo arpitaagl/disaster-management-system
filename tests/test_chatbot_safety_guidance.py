@@ -488,8 +488,8 @@ def test_phase2_live_operational_smoke_prompts_remain_deterministic(monkeypatch)
 
     urgent = chatbot.answer_question("Which incident is most urgent?", center)
     assert urgent.strip()
-    assert "Earthquake" in urgent
-    assert "simulated" in urgent.casefold() or "deterministic" in urgent.casefold()
+    assert "Understanding incident priority" in urgent
+    assert "deterministic rules" in urgent.casefold()
 
     dispatch = chatbot.answer_question("Can you send an ambulance?", center)
     assert "local emergency services" in dispatch
