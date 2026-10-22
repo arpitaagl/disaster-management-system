@@ -82,11 +82,23 @@ def test_auth_is_disabled_only_when_all_auth_settings_are_absent(monkeypatch):
     monkeypatch.delenv("AUTH0_DOMAIN", raising=False)
     monkeypatch.delenv("AUTH0_AUDIENCE", raising=False)
     monkeypatch.delenv("MCP_PUBLIC_URL", raising=False)
+    monkeypatch.delenv("RENDER", raising=False)
 
     assert auth_configuration() is None
 
 
+def test_public_render_deployment_requires_auth_configuration(monkeypatch):
+    monkeypatch.setenv("RENDER", "true")
+    monkeypatch.delenv("AUTH0_DOMAIN", raising=False)
+    monkeypatch.delenv("AUTH0_AUDIENCE", raising=False)
+    monkeypatch.delenv("MCP_PUBLIC_URL", raising=False)
+
+    with pytest.raises(RuntimeError, match="Public Render deployments require"):
+        auth_configuration()
+
+
 def test_partial_auth_configuration_fails_closed(monkeypatch):
+    monkeypatch.delenv("RENDER", raising=False)
     monkeypatch.setenv("AUTH0_DOMAIN", "example.auth0.com")
     monkeypatch.setenv("AUTH0_AUDIENCE", "https://resq-ai-mcp")
     monkeypatch.delenv("MCP_PUBLIC_URL", raising=False)
@@ -96,6 +108,7 @@ def test_partial_auth_configuration_fails_closed(monkeypatch):
 
 
 def test_public_resource_url_must_use_https(monkeypatch):
+    monkeypatch.delenv("RENDER", raising=False)
     monkeypatch.setenv("AUTH0_DOMAIN", "example.auth0.com")
     monkeypatch.setenv("AUTH0_AUDIENCE", "https://resq-ai-mcp")
     monkeypatch.setenv("MCP_PUBLIC_URL", "http://localhost:8000/mcp")
