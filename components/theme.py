@@ -13,8 +13,6 @@ CSS = """
 <style>
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap');
 
-.resq-header-ai-icon { position: fixed; left: 1rem; bottom: 1rem; z-index: 1000002; display: block; width: 74px; height: 74px; border-radius: 50%; overflow: hidden; box-shadow: 0 8px 22px rgba(15,23,42,.32); }
-.resq-header-ai-icon img { width: 100%; height: 100%; border-radius: 50%; display: block; }
 .resq-chat-overlay { display: none; }
 
 :root {
@@ -1607,40 +1605,21 @@ def render_sidebar(center: CommandCenter) -> None:
 
 def render_header(center: CommandCenter, subtitle: str) -> None:
     ai_class = "ok" if "Active" in center.ai_mode else "warn"
-    import base64
     from pathlib import Path
 
     icon_path = Path(__file__).resolve().parents[1] / "assets" / "resq-chatbot-icon.png"
-    icon_src = "data:image/png;base64," + base64.b64encode(icon_path.read_bytes()).decode("ascii")
-    if st.button("Open ResQ Assistant chat", key="resq_chat_launcher", help="Open ResQ Assistant chat"):
-        st.session_state["resq_chat_open"] = not st.session_state.get("resq_chat_open", False)
     st.markdown(
-        f"""
+        """
         <style>
-        div[data-testid="stButton"]:has(button[kind="secondary"][aria-label="Open ResQ Assistant chat"]) {{
-          position: fixed; left: 1rem; bottom: 1rem; z-index: 1000002;
-        }}
-        div[data-testid="stButton"]:has(button[kind="secondary"][aria-label="Open ResQ Assistant chat"]) button {{
-          width: 74px; height: 74px; border-radius: 50%; border: 0; background: #399ed8;
-          box-shadow: 0 8px 22px rgba(15,23,42,.32); color: transparent; font-size: 0;
-          background-image: url('{icon_src}'); background-size: cover; background-position: center;
-        }}
-        div[data-testid="stButton"]:has(button[aria-label="Open ResQ Assistant chat"]) {{
-          position: fixed !important; left: 1rem !important; bottom: 1rem !important; z-index: 1000002 !important;
-          width: 74px !important; height: 74px !important;
-        }}
-        div[data-testid="stButton"]:has(button[aria-label="Open ResQ Assistant chat"]) button {{
-          width: 74px !important; height: 74px !important; border-radius: 50% !important; border: 0 !important;
-          color: transparent !important; font-size: 0 !important; padding: 0 !important;
-          background: #399ed8 url('{icon_src}') center / cover no-repeat !important;
-          box-shadow: 0 8px 22px rgba(15,23,42,.32) !important;
-        }}
-        .resq-chat-overlay {{ display: {'block' if st.session_state.get('resq_chat_open') else 'none'}; position: fixed; z-index: 1000001; left: 1rem; bottom: 6.2rem; width: min(410px, calc(100vw - 2rem)); max-height: 72vh; overflow-y: auto; background: white; border: 1px solid #dbe4ee; border-radius: 16px; padding: 16px; box-shadow: 0 16px 48px rgba(15,23,42,.24); }}
+        div[data-testid="stPopover"] { position: fixed !important; left: 1rem !important; bottom: 1rem !important; z-index: 1000002 !important; }
+        div[data-testid="stPopover"] > button { width: 74px !important; height: 74px !important; border-radius: 50% !important; border: 0 !important; padding: 0 !important; background: #399ed8 !important; box-shadow: 0 8px 22px rgba(15,23,42,.32) !important; }
+        div[data-testid="stPopover"] > button > div { display: none !important; }
         </style>
         """,
         unsafe_allow_html=True,
     )
-    if st.session_state.get("resq_chat_open"):
+    with st.popover("💬", help="Open ResQ Assistant chat"):
+        st.image(str(icon_path), width=56)
         from components.chatbot import render_chatbot
         render_chatbot(center)
     st.markdown(
