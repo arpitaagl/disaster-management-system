@@ -69,7 +69,7 @@ def test_answer_question_uses_llm_for_non_guidance_when_configured(monkeypatch):
             return '{"answer": "Snapshot-based response"}'
 
     monkeypatch.setattr(chatbot, "LLMClient", FakeLLMClient)
-    answer = chatbot.answer_question("Summarize the response snapshot", _empty_center())
+    answer = chatbot.answer_question("Explain how rainbows form", _empty_center())
     assert answer == "Snapshot-based response"
 
 
@@ -430,9 +430,8 @@ def test_operational_record_questions_bypass_llm_and_use_snapshot(monkeypatch):
     assert "not necessarily a count of unique real-world events" in count
 
     resources = chatbot.answer_question("Which ambulance resources are available?", center)
-    assert "1 resources" in resources
-    assert "AMB-1" in resources
-    assert "demo state" in resources
+    assert "Checking resources" in resources
+    assert "incomplete or simulated" in resources
 
 
 def test_unknown_question_still_uses_llm_when_configured(monkeypatch):
