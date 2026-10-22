@@ -124,6 +124,7 @@ class CommandCenter:
         accessibility: str = "Open",
         reporter: str = "",
         image_name: str = "",
+        location_text: str = "",
     ) -> dict[str, Any]:
         analysis = analyze_incident(description, people_affected, accessibility)
         self.ai_mode = analysis.get("ai_mode", "Fallback Analysis Mode")
@@ -142,6 +143,7 @@ class CommandCenter:
             "status": "Active",
             "lat": float(lat),
             "lon": float(lon),
+            "location_text": str(location_text or "").strip(),
             "reported_at": _now_iso(),
             "reporter": reporter or "anonymous",
             "image_name": image_name,
