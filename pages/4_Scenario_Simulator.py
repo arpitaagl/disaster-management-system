@@ -58,34 +58,41 @@ def _distance_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     return radius * 2 * math.atan2(math.sqrt(value), math.sqrt(max(0.0, 1.0 - value)))
 
 
-@st.cache_data(ttl=300, show_spinner=False)
+@st.cache_data(ttl=60, show_spinner=False)
 def _nearby_public_services(lat: float, lon: float, radius_m: int = 25000) -> list[dict]:
-    """Fast, bounded lookup; cache both results and temporary directory outages."""
+    """Search public map data with bounded retries across two Overpass endpoints."""
     query = f"""
-    [out:json][timeout:8];
+    [out:json][timeout:10];
     (
       nwr(around:{radius_m},{lat},{lon})[amenity~"^(hospital|clinic|doctors|police|fire_station)$"];
-      nwr(around:{radius_m},{lat},{lon})[emergency~"^(ambulance_station|fire_station|ambulance_centre|rescue_station)$"];
+      nwr(around:{radius_m},{lat},{lon})[healthcare~"^(hospital|clinic|doctor|emergency_department)$"];
+      nwr(around:{radius_m},{lat},{lon})[emergency~"^(ambulance_station|fire_station|ambulance_centre|rescue_station|ambulance)$"];
     );
     out center tags;
     """
     headers = {"User-Agent": "ResQ-AI public emergency service directory/1.0 (disaster response prototype)"}
-    # One bounded request only. Public directory outages must not block the page
-    # with a chain of mirror retries and multiple Nominatim queries.
-    try:
-        response = requests.post(
-            "https://overpass-api.de/api/interpreter",
-            data={"data": query},
-            headers=headers,
-            timeout=(2, 6),
-        )
-        response.raise_for_status()
-        payload = response.json()
-        if not isinstance(payload, dict) or not isinstance(payload.get("elements"), list):
-            return []
-    except (requests.RequestException, ValueError, TypeError):
-        # Returning an empty list lets Streamlit cache the outage for 5 minutes,
-        # avoiding a new slow request on every rerun. No services are fabricated.
+    payload = None
+    # Public Overpass instances can be busy. Try one fallback, but keep total
+    # waiting bounded; never fabricate facilities if both endpoints fail.
+    for endpoint in (
+        "https://overpass-api.de/api/interpreter",
+        "https://overpass.kumi.systems/api/interpreter",
+    ):
+        try:
+            response = requests.post(
+                endpoint,
+                data={"data": query},
+                headers=headers,
+                timeout=(2, 5),
+            )
+            response.raise_for_status()
+            candidate = response.json()
+            if isinstance(candidate, dict) and isinstance(candidate.get("elements"), list):
+                payload = candidate
+                break
+        except (requests.RequestException, ValueError, TypeError):
+            continue
+    if payload is None:
         return []
 
     labels = {
@@ -93,6 +100,7 @@ def _nearby_public_services(lat: float, lon: float, radius_m: int = 25000) -> li
         "police": "Police station", "fire_station": "Fire station",
         "ambulance_station": "Ambulance station", "ambulance_centre": "Ambulance centre",
         "rescue_station": "Rescue station", "ambulance": "Ambulance service",
+        "doctor": "Medical clinic", "emergency_department": "Emergency department",
     }
     results = []
     seen = set()
@@ -169,9 +177,13 @@ try:
 except (TypeError, ValueError):
     people_label = str(people or "Not provided")
 lat, lon = incident.get("lat"), incident.get("lon")
-# Use the coordinates captured when the incident was reported. The saved address
-# is displayed for context; no second location entry or geocoding step is needed.
+# The entered address is the human-readable source of truth. Resolve it again for
+# nearby searches so stale/mismatched coordinates cannot send the lookup elsewhere.
 location_text = saved_location_text
+if location_text:
+    resolved = _geocode_incident_location(location_text)
+    if resolved is not None:
+        lat, lon = resolved
 location = location_text or (
     f"{lat}, {lon}"
     if lat is not None and lon is not None
@@ -202,7 +214,7 @@ with detail_right:
 
 st.divider()
 st.markdown("### Nearby hospitals and emergency services")
-st.caption(f"Search location: {location_text or location} · nearest first · straight-line distance estimate. Public directory entries do not confirm live availability or dispatch readiness.")
+st.caption(f"Search location: {location_text or location}" + (f" · map point {float(lat):.5f}, {float(lon):.5f}" if lat is not None and lon is not None else "") + " · nearest first · straight-line distance estimate. Public directory entries do not confirm live availability or dispatch readiness.")
 if lat is None or lon is None:
     st.warning("This incident has no usable coordinates. Reopen the report and enter its location before searching nearby services.")
 else:
