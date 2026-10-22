@@ -16,7 +16,7 @@ REQUIRED_SCOPE = "read:incidents"
 class Auth0JWTVerifier(TokenVerifier):
     """Validate Auth0 RS256 access tokens against issuer, audience, expiry, and scope."""
 
-    def __init__(self, domain: str, audience: str) -> None:
+    def __init__(self, domain: str, audience: str, resource_url: str) -> None:
         domain = domain.strip().rstrip("/")
         if not domain or "/" in domain or "://" in domain:
             raise ValueError("AUTH0_DOMAIN must be a hostname, not a URL or path")
@@ -24,6 +24,7 @@ class Auth0JWTVerifier(TokenVerifier):
             raise ValueError("AUTH0_AUDIENCE must not be empty")
         self.issuer = f"https://{domain}/"
         self.audience = audience.strip()
+        self.resource_url = resource_url.strip().rstrip("/")
         self.jwks = PyJWKClient(f"https://{domain}/.well-known/jwks.json")
 
     async def verify_token(self, token: str) -> AccessToken | None:
@@ -54,7 +55,8 @@ class Auth0JWTVerifier(TokenVerifier):
                 client_id=str(claims.get("azp") or claims.get("client_id") or subject),
                 scopes=scopes,
                 expires_at=int(exp),
-                resource=self.audience,
+                resource=self.resource_url,
+                subject=subject,
                 claims=claims,
             )
         except (jwt.PyJWTError, ValueError, TypeError, KeyError):
@@ -83,10 +85,11 @@ def auth_configuration() -> tuple[Auth0JWTVerifier, Any] | None:
     from pydantic import AnyHttpUrl
     from mcp.server.auth.settings import AuthSettings
 
-    verifier = Auth0JWTVerifier(domain=domain, audience=audience)
+    verifier = Auth0JWTVerifier(domain=domain, audience=audience, resource_url=public_url)
     settings = AuthSettings(
         issuer_url=AnyHttpUrl(verifier.issuer),
         resource_server_url=AnyHttpUrl(public_url),
         required_scopes=[REQUIRED_SCOPE],
+        validate_token_resource=True,
     )
     return verifier, settings
