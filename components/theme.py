@@ -1624,15 +1624,7 @@ def render_sidebar(center: CommandCenter) -> None:
 def render_header(center: CommandCenter, subtitle: str) -> None:
     ai_class = "ok" if "Active" in center.ai_mode else "warn"
     current_theme = st.session_state.get("resq_theme", "Light")
-    spacer, assistant_slot, theme_slot = st.columns([0.88, 0.08, 0.06], vertical_alignment="center")
-    with assistant_slot:
-        if st.button(
-            "🆘 ResQ-AI",
-            key="header_resq_ai_home",
-            help="Open the ResQ-AI assistant",
-            use_container_width=True,
-        ):
-            st.switch_page("pages/6_ResQ_Assistant.py")
+    spacer, theme_slot = st.columns([0.94, 0.06], vertical_alignment="center")
     with theme_slot:
         if st.button(
             "☀" if current_theme == "Dark" else "☾",
