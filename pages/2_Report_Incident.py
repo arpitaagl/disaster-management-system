@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-import os
-
 import streamlit as st
 
-from components.google_location_picker import google_location_picker
+from components.leaflet_location_picker import leaflet_location_picker
 from components.session import get_center, persist
 from components.theme import page_setup, render_header, render_sidebar
 from core.config import CITY_LAT, CITY_LON
@@ -22,32 +20,13 @@ st.info(
     "It does not choose the final rescue unit. Priority scoring and assignment are deterministic."
 )
 
-try:
-    google_maps_api_key = str(st.secrets.get("GOOGLE_MAPS_API_KEY", "")).strip()
-except Exception:
-    google_maps_api_key = ""
-google_maps_api_key = google_maps_api_key or os.getenv("GOOGLE_MAPS_API_KEY", "").strip()
-
 st.markdown("### Select incident location")
 st.caption("Search for an address or landmark, click the map, or drag the pin to the exact incident location.")
-selected_location = None
-if google_maps_api_key:
-    selected_location = google_location_picker(
-        api_key=google_maps_api_key,
-        default_lat=CITY_LAT,
-        default_lon=CITY_LON,
-        key="report_incident_google_map",
-    )
-else:
-    st.warning(
-        "Google Maps is not configured yet. Add GOOGLE_MAPS_API_KEY to Streamlit secrets "
-        "and enable Maps JavaScript API and Places API to use the location picker."
-    )
-    st.link_button(
-        "Open Google Maps",
-        "https://maps.google.com/",
-        use_container_width=False,
-    )
+selected_location = leaflet_location_picker(
+    default_lat=CITY_LAT,
+    default_lon=CITY_LON,
+    key="report_incident_leaflet_map",
+)
 
 if isinstance(selected_location, dict) and selected_location.get("lat") is not None and selected_location.get("lon") is not None:
     lat = float(selected_location["lat"])
@@ -74,7 +53,7 @@ with st.form("report_form"):
 
 if submitted:
     if not selected_address or not isinstance(selected_location, dict):
-        errors = ["Select a precise incident location on the Google Map before submitting."]
+        errors = ["Select a precise incident location on the map before submitting."]
     else:
         errors = validate_report(description, people, lat, lon)
     if errors:
