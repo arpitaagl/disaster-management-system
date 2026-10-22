@@ -315,31 +315,33 @@ def render_live_disaster_intelligence() -> None:
             mapped = mapped[india_label].reset_index(drop=True)
             # Keep the marker palette consistent between the map and its legend.
             hazard_palette = [
-                ("Flood", "#ef4444", [239, 68, 68, 245]),
-                ("Drought", "#eab308", [234, 179, 8, 245]),
-                ("Earthquake", "#8b5cf6", [139, 92, 246, 245]),
-                ("Cyclone", "#06b6d4", [6, 182, 212, 245]),
-                ("Storm", "#3b82f6", [59, 130, 246, 245]),
-                ("Wildfire", "#f97316", [249, 115, 22, 245]),
-                ("Landslide", "#22c55e", [34, 197, 94, 245]),
-                ("Other", "#ec4899", [236, 72, 153, 245]),
+                ("Flood", "#ef4444", [239, 68, 68, 245], ("flood", "inundat")),
+                ("Drought", "#eab308", [234, 179, 8, 245], ("drought", "dry spell", "water scarcity")),
+                ("Earthquake", "#8b5cf6", [139, 92, 246, 245], ("earthquake", "seismic")),
+                ("Cyclone", "#06b6d4", [6, 182, 212, 245], ("cyclone", "hurricane", "typhoon")),
+                ("Storm", "#3b82f6", [59, 130, 246, 245], ("storm", "thunder", "lightning")),
+                ("Wildfire", "#f97316", [249, 115, 22, 245], ("wildfire", "forest fire")),
+                ("Landslide", "#22c55e", [34, 197, 94, 245], ("landslide", "mudslide")),
+                ("Other", "#ec4899", [236, 72, 153, 245], ()),
             ]
 
-            def marker_color(hazard):
-                hazard_name = str(hazard or "").casefold()
-                for label, _, rgba in hazard_palette[:-1]:
-                    if label.casefold() in hazard_name:
+            def marker_color(event):
+                event_text = " ".join(
+                    str(event.get(field) or "") for field in ("Hazard", "Event")
+                ).casefold()
+                for _, _, rgba, terms in hazard_palette[:-1]:
+                    if any(term in event_text for term in terms):
                         return rgba
                 return hazard_palette[-1][2]
 
-            mapped["Marker color"] = mapped["Hazard"].map(marker_color)
+            mapped["Marker color"] = mapped.apply(marker_color, axis=1)
             mapped["Glow color"] = mapped["Marker color"].map(
                 lambda color: [color[0], color[1], color[2], 62]
             )
             legend_items = "".join(
                 f'<span style="display:inline-flex;align-items:center;gap:.38rem;margin:0 .8rem .4rem 0;white-space:nowrap;">'
                 f'<i style="width:.72rem;height:.72rem;border-radius:50%;background:{color};box-shadow:0 0 9px {color};display:inline-block;"></i>{label}</span>'
-                for label, color, _ in hazard_palette
+                for label, color, _, _ in hazard_palette
             )
             st.markdown(
                 f'<div style="font-size:.82rem;line-height:1.8;padding:.15rem 0 .35rem;">{legend_items}</div>',
