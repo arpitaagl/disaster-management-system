@@ -153,7 +153,7 @@ selected_id = st.selectbox(
     format_func=lambda value: incident_labels[value],
 )
 incident = next((item for item in active_incidents if str(item.get("id")) == selected_id), {})
-saved_location_text = location_override.strip()
+saved_location_text = str(incident.get("location_text") or "").strip()
 location_override = st.text_input(
     "Incident location for nearby-service search",
     value=saved_location_text,
