@@ -103,9 +103,21 @@ if submitted:
         if geocoded:
             lat, lon = geocoded
             st.success(f"Location found for: {selected_address}")
+            errors = validate_report(description, people, lat, lon)
+        elif (
+            abs(lat - float(CITY_LAT)) < 0.000001
+            and abs(lon - float(CITY_LON)) < 0.000001
+        ):
+            # Never silently save the configured default city coordinates when
+            # the submitted address could not be geocoded. That can send the
+            # Scenario Simulator to a completely different city.
+            errors = [
+                "Address lookup failed and the coordinates still contain the default city centre. "
+                "Open Advanced: coordinates and enter the actual incident latitude/longitude, then submit again."
+            ]
         else:
-            st.warning("Could not automatically locate this address. Using the coordinates in Advanced settings; please confirm they match the incident location.")
-        errors = validate_report(description, people, lat, lon)
+            st.warning("Address lookup failed. Using the manually entered coordinates; verify they match the incident location.")
+            errors = validate_report(description, people, lat, lon)
     if errors:
         for err in errors:
             st.error(err)
