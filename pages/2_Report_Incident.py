@@ -74,8 +74,7 @@ with st.form("report_form"):
 
 if submitted:
     if not selected_address or not isinstance(selected_location, dict):
-        st.error("Select a precise incident location on the Google Map before submitting.")
-        errors = []
+        errors = ["Select a precise incident location on the Google Map before submitting."]
     else:
         errors = validate_report(description, people, lat, lon)
     if errors:
