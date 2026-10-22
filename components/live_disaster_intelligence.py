@@ -1,6 +1,9 @@
 """Unified global hazard monitoring from connected public feeds."""
 from __future__ import annotations
 
+from collections import Counter
+import re
+
 import pandas as pd
 import pydeck as pdk
 import requests
@@ -22,12 +25,32 @@ def _cached_usgs() -> dict:
     return fetch_usgs_earthquakes()
 
 
+def _is_india_incident(event: dict) -> bool:
+    """Keep only explicitly India-located records from global feeds."""
+    source = str(event.get("Source") or "")
+    if source in {"India Meteorological Department — public CAP", "NDMA SACHET / CAP"}:
+        return True
+
+    location_text = f"{event.get('Area') or ''} {event.get('Event') or ''}"
+    if not re.search(r"\bindia\b", location_text, flags=re.IGNORECASE):
+        return False
+
+    latitude, longitude = event.get("Latitude"), event.get("Longitude")
+    if latitude is None or longitude is None:
+        return True
+    try:
+        latitude, longitude = float(latitude), float(longitude)
+    except (TypeError, ValueError):
+        return False
+    return 5.0 <= latitude <= 38.0 and 67.0 <= longitude <= 98.0
+
+
 @st.fragment(run_every=300)
 def render_live_disaster_intelligence() -> None:
     st.markdown('<div class="resq-kicker">RESQ-AI / GLOBAL MONITORING</div>', unsafe_allow_html=True)
     st.title("Live Disaster Intelligence")
     st.caption(
-        "A map-first view of source-reported global hazards from GDACS and USGS, alongside India government alerts from IMD and NDMA SACHET when their feeds are available. "
+        "India-focused incidents from GDACS, USGS, IMD public CAP, and NDMA SACHET when their feeds provide India location details. "
         "These public feeds do not confirm local damage, casualties, or dispatch requirements."
     )
 
@@ -102,7 +125,7 @@ def render_live_disaster_intelligence() -> None:
                     "Area": "Not provided",
                     "Alert / magnitude": f"Magnitude {magnitude}" if magnitude is not None else "Not reported",
                     "Event time (UTC)": event.get("time_utc") or "Not provided",
-                    "Source": "USGS",
+                    "Source": "USGS Earthquake Hazards Program",
                     "Record": event.get("detail_url") or USGS_ALL_DAY_URL,
                     "Latitude": event.get("latitude"),
                     "Longitude": event.get("longitude"),
@@ -140,7 +163,7 @@ def render_live_disaster_intelligence() -> None:
                 "Area": area or "Location not provided",
                 "Alert / magnitude": summary or "See official alert",
                 "Event time (UTC)": row.get("published") or "Not provided",
-                "Source": "IMD public CAP",
+                "Source": "India Meteorological Department — public CAP",
                 "Record": row.get("link") or public_result.get("source_url") or IMD_PUBLIC_CAP_URL,
                 "Latitude": None,
                 "Longitude": None,
@@ -188,21 +211,51 @@ def render_live_disaster_intelligence() -> None:
             "Official source": "https://sachet.ndma.gov.in/",
         })
 
+    events = [event for event in events if _is_india_incident(event)]
+    india_counts = Counter(event["Source"] for event in events)
+    india_health_rows = []
+    for source_row in source_rows:
+        source_name = source_row["Source"]
+        india_incidents = (
+            india_counts.get(source_name, 0)
+            if source_row["Status"] == "Connected"
+            else "—"
+        )
+        source_row.pop("Events", None)
+        india_health_rows.append({
+            "Source": source_name,
+            "Status": source_row.pop("Status"),
+            "India incidents": india_incidents,
+            **source_row,
+        })
+    source_rows = india_health_rows
+
     connected = sum(row["Status"] == "Connected" for row in source_rows)
     c1, c2, c3 = st.columns(3)
-    c1.metric("Source-reported records", len(events))
+    c1.metric("India incidents", len(events))
     c2.metric("Feeds connected", f"{connected} / {len(source_rows)}")
     c3.metric("Monitoring window", f"{lookback} days + USGS past day")
 
     with st.expander("Data-source health", expanded=bool(failures) or force_refresh):
+        health_df = pd.DataFrame(source_rows)
+        health_columns = [
+            "Source", "Status", "India incidents", "Retrieved by app (UTC)",
+            "Latest event update/start (UTC)", "Source feed generated (UTC)", "Official source",
+        ]
+        health_df = health_df[[column for column in health_columns if column in health_df.columns]]
         st.dataframe(
-            pd.DataFrame(source_rows), use_container_width=True, hide_index=True,
-            column_config={"Official source": st.column_config.LinkColumn("Official source", display_text="Open source")},
+            health_df, use_container_width=True, hide_index=True, column_order=health_df.columns.tolist(),
+            column_config={
+                "Source": st.column_config.TextColumn("Source", width="medium"),
+                "Status": st.column_config.TextColumn("Status", width="small"),
+                "India incidents": st.column_config.TextColumn("India incidents", width="small"),
+                "Official source": st.column_config.LinkColumn("Official source", display_text="Open source"),
+            },
         )
         for name, reason, url in failures:
             st.warning(f"{name} is unavailable ({reason}). No example events were substituted. [Open official source]({url})")
         st.caption(
-            "App retrieval time means when this app received the response; it does not mean every event is new. "
+            "India incident counts include only records explicitly located in India. App retrieval time means when this app received the response; it does not mean every event is new. "
             "GDACS may continue listing ongoing alerts, while USGS provides a rolling past-day earthquake feed."
         )
         if force_refresh:
@@ -322,7 +375,7 @@ def render_live_disaster_intelligence() -> None:
                             st.link_button("Open source record", record_url)
             st.caption(
                 f"{len(mapped)} filtered source events explicitly labeled India and inside India's approximate bounds. "
-                "The event stream still includes records from all connected feeds."
+                "Only India-located records are shown in the event stream."
             )
     with list_col:
         with st.container(border=True):
