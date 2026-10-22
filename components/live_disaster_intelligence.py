@@ -101,6 +101,25 @@ def _india_marker_coordinates(area: str, index: int) -> tuple[float, float]:
     return 22.5 + lat_offset, 79.0 + lon_offset
 
 
+def _select_stream_events(frame: pd.DataFrame, limit: int = 10) -> pd.DataFrame:
+    """Keep the stream compact while reserving slots for key hazard categories."""
+    if len(frame) <= limit:
+        return frame
+    priority = [
+        "Flood", "Drought", "Landslide", "Earthquake", "Cyclone", "Heavy rainfall",
+        "Storm", "Heatwave", "Cold / snow", "Wildfire", "Other",
+    ]
+    picked: list[int] = []
+    for hazard in priority:
+        candidates = frame.index[frame["Hazard"] == hazard].tolist()
+        if candidates:
+            picked.append(candidates[0])
+        if len(picked) == limit:
+            break
+    picked.extend(index for index in frame.index if index not in picked)
+    return frame.loc[picked[:limit]]
+
+
 @st.fragment(run_every=300)
 def render_live_disaster_intelligence() -> None:
     st.markdown('<div class="resq-kicker">RESQ-AI / GLOBAL MONITORING</div>', unsafe_allow_html=True)
@@ -344,6 +363,9 @@ def render_live_disaster_intelligence() -> None:
         searchable = filtered[["Hazard", "Event", "Area", "Alert / magnitude", "Source"]].fillna("").astype(str)
         filtered = filtered[searchable.apply(lambda col: col.str.casefold().str.contains(term, regex=False)).any(axis=1)]
 
+    matching_count = len(filtered)
+    filtered = _select_stream_events(filtered, limit=10)
+
     map_col, list_col = st.columns([2, 1], gap="large")
     with map_col:
         with st.container(border=True):
@@ -491,6 +513,8 @@ def render_live_disaster_intelligence() -> None:
     with list_col:
         with st.container(border=True):
             st.markdown(f"### Event stream · {len(filtered)}")
+            if matching_count > len(filtered):
+                st.caption(f"Showing 10 mixed incidents of {matching_count} matching source events. Flood, drought, and landslide are prioritized when available.")
             if filtered.empty:
                 st.info("No events match the selected filters.")
             else:
