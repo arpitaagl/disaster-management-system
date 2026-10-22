@@ -1559,8 +1559,45 @@ REFERENCE_CSS = """
 [data-testid="stMain"],
 [data-testid="stMainBlockContainer"] {
   color: var(--resq-ink) !important;
-  background: linear-gradient(135deg, #f3f8fc 0%, #eef6fb 56%, #eaf4f9 100%) !important;
+  background: transparent !important;
 }
+.stApp {
+  position: relative !important;
+  isolation: isolate !important;
+  background:
+    radial-gradient(ellipse 38rem 28rem at 5% 8%, rgba(164,218,246,.34), transparent 72%),
+    radial-gradient(ellipse 33rem 24rem at 96% 37%, rgba(118,190,234,.20), transparent 72%),
+    radial-gradient(ellipse 42rem 26rem at 62% 100%, rgba(170,220,246,.24), transparent 72%),
+    linear-gradient(135deg, #f3f8fc 0%, #eef6fb 56%, #eaf4f9 100%) !important;
+}
+/* Soft, uneven blue wash at the page edges adds depth without sitting over widgets. */
+.stApp::before,
+.stApp::after {
+  content: "";
+  position: fixed;
+  z-index: -1;
+  pointer-events: none;
+  filter: blur(1px);
+}
+.stApp::before {
+  width: 78vw;
+  height: 45vh;
+  left: -20vw;
+  top: 27vh;
+  opacity: .52;
+  background: linear-gradient(115deg, rgba(106,190,237,.18), rgba(195,231,249,.08) 72%, transparent);
+  clip-path: polygon(0 18%, 13% 8%, 27% 12%, 38% 2%, 53% 11%, 67% 4%, 81% 15%, 100% 8%, 94% 34%, 100% 52%, 88% 67%, 97% 83%, 78% 91%, 64% 82%, 49% 97%, 34% 86%, 18% 96%, 9% 76%, 0 62%, 7% 43%);
+}
+.stApp::after {
+  width: 72vw;
+  height: 52vh;
+  right: -18vw;
+  bottom: -20vh;
+  opacity: .44;
+  background: linear-gradient(235deg, rgba(104,177,229,.22), rgba(185,222,244,.09) 70%, transparent);
+  clip-path: polygon(0 14%, 16% 3%, 29% 13%, 43% 0, 56% 14%, 70% 6%, 83% 16%, 100% 4%, 95% 31%, 100% 48%, 89% 64%, 98% 81%, 80% 93%, 66% 82%, 51% 100%, 35% 86%, 20% 97%, 8% 78%, 0 60%, 9% 41%);
+}
+section[data-testid="stMain"], section[data-testid="stSidebar"] { position: relative; z-index: 1; }
 header[data-testid="stHeader"] { background: rgba(255,255,255,.92) !important; }
 [data-testid="stMainBlockContainer"] { padding-top: 0 !important; }
 section[data-testid="stSidebar"] {
