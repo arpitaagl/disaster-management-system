@@ -1595,7 +1595,6 @@ def render_sidebar(center: CommandCenter) -> None:
     ]
     for page_path, glyph, label in nav_items:
         st.sidebar.page_link(page_path, label=f"{glyph}  {label}")
-    st.sidebar.page_link("pages/6_ResQ_Assistant.py", label="🤖  ResQ Assistant")
     st.sidebar.divider()
     st.sidebar.caption(DISCLAIMER)
 
