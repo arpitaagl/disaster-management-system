@@ -66,22 +66,21 @@ def _approximate_india_coordinates(area: str) -> tuple[float, float] | None:
     return None
 
 
-def _hazard_name(title: str, summary: str, fallback: str = "Weather alert") -> str:
+def _hazard_name(title: str, summary: str, fallback: str = "Other") -> str:
     """Prefer the hazard described by the alert over its severity rating."""
     text = f"{title} {summary}".casefold()
     hazard_terms = (
-        ("Tropical cyclone", ("tropical cyclone", "cyclone", "hurricane", "typhoon")),
+        ("Cyclone", ("tropical cyclone", "cyclone", "hurricane", "typhoon")),
         ("Flood", ("flood", "inundat")),
         ("Heavy rainfall", ("heavy rain", "rainfall", "precipitation")),
-        ("Thunderstorm", ("thunderstorm", "thunder storm", "lightning")),
+        ("Storm", ("thunderstorm", "thunder storm", "lightning", "storm", "squall", "gale")),
         ("Heatwave", ("heatwave", "heat wave", "extreme heat")),
-        ("Cold wave", ("cold wave", "coldwave", "cold weather")),
+        ("Cold / snow", ("cold wave", "coldwave", "cold weather", "snowfall", "heavy snow", "blizzard")),
         ("Landslide", ("landslide", "mudslide")),
         ("Earthquake", ("earthquake", "seismic")),
         ("Drought", ("drought", "dry spell", "water scarcity")),
         ("Wildfire", ("wildfire", "forest fire")),
         ("Tsunami", ("tsunami",)),
-        ("Snowfall", ("snowfall", "heavy snow", "blizzard")),
     )
     for label, terms in hazard_terms:
         if any(term in text for term in terms):
@@ -146,7 +145,10 @@ def render_live_disaster_intelligence() -> None:
             })
             for event in gdacs.get("events", []):
                 events.append({
-                    "Hazard": event.get("event_type", "Hazard"),
+                    "Hazard": _hazard_name(
+                        f"{event.get('event_type', '')} {event.get('name', '')}",
+                        event.get("alert_level", ""),
+                    ),
                     "Event": event.get("name", "Name not provided"),
                     "Area": event.get("country", "Not provided"),
                     "Alert / magnitude": event.get("alert_level", "Not reported"),
@@ -314,9 +316,13 @@ def render_live_disaster_intelligence() -> None:
         return
 
     df = pd.DataFrame(events)
+    hazard_categories = [
+        "Flood", "Drought", "Earthquake", "Cyclone", "Heavy rainfall",
+        "Storm", "Heatwave", "Cold / snow", "Wildfire", "Landslide", "Other",
+    ]
     f1, f2, f3 = st.columns([1, 1, 2])
     with f1:
-        hazard_options = ["All hazards"] + sorted(df["Hazard"].dropna().astype(str).unique().tolist())
+        hazard_options = ["All hazards"] + hazard_categories
         selected_hazard = st.selectbox("Hazard type", hazard_options)
     with f2:
         source_options = ["All sources"] + sorted(df["Source"].dropna().astype(str).unique().tolist())
