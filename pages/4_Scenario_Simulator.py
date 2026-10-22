@@ -323,3 +323,198 @@ if center.shelters and assignment and (assignment.get("shelter_name") or assignm
     st.write("**Shelter candidate:** " + str(assignment.get("shelter_name") or assignment.get("shelter_id")))
 elif not center.shelters:
     st.caption("No verified shelter inventory is connected.")
+
+
+# What-if simulations operate on a copy of the current state. They never overwrite
+# submitted reports or persist simulated changes to the operational inventory.
+from core.state import CommandCenter
+
+st.divider()
+st.markdown("### What-if response simulation")
+st.caption(
+    "Choose the incident above, change one condition, and compare the response plan. "
+    "These are hypothetical changes only; they do not dispatch teams or alter saved records."
+)
+
+scenario_options = [
+    "Increase estimated people affected",
+    "Mark a resource unavailable",
+    "Block a road",
+    "Reduce reported hospital beds",
+    "Increase shelter occupancy",
+]
+scenario_kind = st.selectbox(
+    "Scenario condition",
+    scenario_options,
+    key="scenario_condition",
+)
+
+scenario_value = None
+scenario_target = None
+scenario_ready = True
+
+if scenario_kind == "Increase estimated people affected":
+    current_people = max(0, int(incident.get("people_affected") or 0))
+    scenario_value = st.number_input(
+        "Hypothetical people affected",
+        min_value=0,
+        value=current_people,
+        step=1,
+        key=f"scenario_people_{selected_id}",
+    )
+elif scenario_kind == "Mark a resource unavailable":
+    if not center.resources:
+        st.info("No resource inventory is connected, so this scenario cannot be tested yet.")
+        scenario_ready = False
+    else:
+        resource_options = {
+            str(r.get("id")): f"{r.get('name') or r.get('id')} · {r.get('status') or 'Status unknown'}"
+            for r in center.resources if r.get("id")
+        }
+        scenario_target = st.selectbox(
+            "Resource to mark unavailable",
+            list(resource_options),
+            format_func=lambda value: resource_options[value],
+            key="scenario_resource",
+        )
+elif scenario_kind == "Block a road":
+    if not center.roads:
+        st.info("No road-segment inventory is connected. Upload verified road data before testing road closures.")
+        scenario_ready = False
+    else:
+        road_options = {
+            str(r.get("id")): f"{r.get('name') or r.get('id')} · {r.get('status') or 'Status unknown'}"
+            for r in center.roads if r.get("id")
+        }
+        scenario_target = st.selectbox(
+            "Road segment to block",
+            list(road_options),
+            format_func=lambda value: road_options[value],
+            key="scenario_road",
+        )
+elif scenario_kind == "Reduce reported hospital beds":
+    hospital_options = {
+        str(h.get("id")): f"{h.get('name') or h.get('id')} · {int(h.get('available_beds') or 0)} reported beds"
+        for h in center.hospitals
+        if h.get("id") and str(h.get("source_type") or "") != "public_reference_directory"
+        and h.get("available_beds") is not None
+    }
+    if not hospital_options:
+        st.info("No operator-reported hospital capacity is connected. Public directory locations do not provide live bed counts.")
+        scenario_ready = False
+    else:
+        scenario_target = st.selectbox(
+            "Hospital capacity to change",
+            list(hospital_options),
+            format_func=lambda value: hospital_options[value],
+            key="scenario_hospital",
+        )
+        current_beds = next(
+            (int(h.get("available_beds") or 0) for h in center.hospitals if str(h.get("id")) == scenario_target),
+            0,
+        )
+        scenario_value = st.number_input(
+            "Hypothetical available beds",
+            min_value=0,
+            value=current_beds,
+            step=1,
+            key=f"scenario_beds_{scenario_target}",
+        )
+elif scenario_kind == "Increase shelter occupancy":
+    shelter_options = {
+        str(s.get("id")): f"{s.get('name') or s.get('id')} · {int(s.get('occupied') or 0)}/{int(s.get('capacity') or 0)} occupied"
+        for s in center.shelters if s.get("id")
+    }
+    if not shelter_options:
+        st.info("No verified shelter capacity records are connected.")
+        scenario_ready = False
+    else:
+        scenario_target = st.selectbox(
+            "Shelter to change",
+            list(shelter_options),
+            format_func=lambda value: shelter_options[value],
+            key="scenario_shelter",
+        )
+        shelter = next((s for s in center.shelters if str(s.get("id")) == scenario_target), {})
+        scenario_value = st.number_input(
+            "Hypothetical occupied spaces",
+            min_value=0,
+            max_value=max(0, int(shelter.get("capacity") or 0)),
+            value=min(
+                max(0, int(shelter.get("occupied") or 0)),
+                max(0, int(shelter.get("capacity") or 0)),
+            ),
+            step=1,
+            key=f"scenario_occupancy_{scenario_target}",
+        )
+
+if st.button(
+    "Simulate and compare response plan",
+    type="primary",
+    use_container_width=True,
+    disabled=not scenario_ready,
+    key="run_response_scenario",
+):
+    simulated = CommandCenter.from_dict(center.to_dict())
+    try:
+        if scenario_kind == "Increase estimated people affected":
+            simulated.bump_people(selected_id, int(scenario_value))
+        elif scenario_kind == "Mark a resource unavailable":
+            simulated.set_resource_status(str(scenario_target), "Unavailable")
+        elif scenario_kind == "Block a road":
+            simulated.set_road_status(str(scenario_target), "Blocked")
+        elif scenario_kind == "Reduce reported hospital beds":
+            simulated.set_hospital_beds(str(scenario_target), int(scenario_value))
+        elif scenario_kind == "Increase shelter occupancy":
+            simulated.set_shelter_occupied(str(scenario_target), int(scenario_value))
+
+        before = center.assignment_for(selected_id) or {}
+        after = simulated.assignment_for(selected_id) or {}
+        before_name = before.get("resource_name") or "No eligible resource"
+        after_name = after.get("resource_name") or "No eligible resource"
+        before_distance = before.get("distance_km")
+        after_distance = after.get("distance_km")
+
+        st.markdown("#### Response plan comparison")
+        left, right = st.columns(2)
+        with left:
+            st.markdown("**Current conditions**")
+            st.metric("Candidate resource", str(before_name))
+            st.metric(
+                "Estimated distance",
+                f"{before_distance:.2f} km" if isinstance(before_distance, (int, float)) else "Unavailable",
+            )
+            st.caption(str(before.get("reason") or "No allocation reason available."))
+        with right:
+            st.markdown("**Simulated conditions**")
+            st.metric(
+                "Candidate resource",
+                str(after_name),
+                delta=("Changed" if before_name != after_name else "Unchanged"),
+                delta_color="off",
+            )
+            st.metric(
+                "Estimated distance",
+                f"{after_distance:.2f} km" if isinstance(after_distance, (int, float)) else "Unavailable",
+            )
+            st.caption(str(after.get("reason") or "No allocation reason available."))
+
+        if before_name != after_name or before_distance != after_distance:
+            st.warning("The hypothetical condition changes the candidate plan. A human coordinator must verify all details.")
+        else:
+            st.info("The selected resource recommendation did not change under this scenario. Review the reason and inventory assumptions.")
+        if after.get("hospital_name") or after.get("hospital_id"):
+            st.write(
+                "**Hospital lead after simulation:** "
+                + str(after.get("hospital_name") or after.get("hospital_id"))
+                + (
+                    f" · {after.get('hospital_km'):.2f} km"
+                    if isinstance(after.get("hospital_km"), (int, float))
+                    else ""
+                )
+            )
+            if after.get("hospital_availability") != "capacity-reported":
+                st.caption("Hospital availability remains unverified; a directory match is not a confirmed bed.")
+        st.caption("Simulation only — no report, inventory, dispatch, or saved response plan was changed.")
+    except (TypeError, ValueError, KeyError) as exc:
+        st.error(f"Could not run this scenario: {exc}")
