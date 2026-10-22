@@ -306,10 +306,10 @@ def render_live_disaster_intelligence() -> None:
             if south_index is not None:
                 mapped.at[south_index, "Marker color"] = [239, 68, 68, 245]
             # Use numeric accessor fields instead of a list-valued dataframe column;
-            # deck.gl reliably reads these columns when serializing Streamlit charts.
-            mapped[["marker_r", "marker_g", "marker_b"]] = pd.DataFrame(
-                mapped["Marker color"].tolist(), index=mapped.index
-            ).iloc[:, :3]
+            # map each channel independently so empty source results stay valid too.
+            mapped["marker_r"] = mapped["Marker color"].map(lambda color: color[0])
+            mapped["marker_g"] = mapped["Marker color"].map(lambda color: color[1])
+            mapped["marker_b"] = mapped["Marker color"].map(lambda color: color[2])
             legend_items = "".join(
                 f'<span style="display:inline-flex;align-items:center;gap:.38rem;margin:0 .8rem .4rem 0;white-space:nowrap;">'
                 f'<i style="width:.72rem;height:.72rem;border-radius:50%;background:{color};box-shadow:0 0 9px {color};display:inline-block;"></i>{label}</span>'
