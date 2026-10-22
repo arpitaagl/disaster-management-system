@@ -1,17 +1,11 @@
 from __future__ import annotations
 
-import pandas as pd
+import math
+import requests
 import streamlit as st
 
 from components.session import get_center, persist
 from components.theme import page_setup, render_header, render_sidebar
-from core.official_directory import nearby_public_hospitals
-from core.persistence import (
-    inventory_admin_configured,
-    inventory_admin_token_matches,
-    is_configured,
-    save_inventory,
-)
 
 page_setup("Scenario Simulator")
 
@@ -27,135 +21,67 @@ st.caption(
     "unverified assets as real. An assessment is not a dispatch confirmation."
 )
 
-# Make the persistence state visible so operators know whether reports survive a new session.
-if st.session_state.get("incident_store_error"):
-    st.error(str(st.session_state["incident_store_error"]))
-elif st.session_state.get("incident_store_configured"):
-    st.success("Incident database: configured for permanent storage.")
-else:
-    st.warning("Incident database: not connected. Reports may exist only in this browser session.")
+# This feature reads incidents from the current app session and public service directories.
+# It does not require Supabase or an inventory access token.
 
 
-def _parse_inventory(upload, kind: str) -> list[dict]:
-    if upload is None:
-        return []
-    frame = pd.read_csv(upload).fillna("")
-    required = {
-        "resources": {"id", "name", "type", "lat", "lon", "status", "capacity", "capabilities"},
-        "hospitals": {"id", "name", "lat", "lon", "available_beds", "emergency_capability"},
-        "shelters": {"id", "name", "lat", "lon", "capacity", "occupied"},
-    }[kind]
-    missing = sorted(required - set(frame.columns))
-    if missing:
-        raise ValueError(f"{kind.title()} CSV is missing columns: {', '.join(missing)}")
-    rows = []
-    for row in frame.to_dict(orient="records"):
-        record = {str(k): v for k, v in row.items()}
-        record["id"] = str(record.get("id") or "").strip()
-        record["name"] = str(record.get("name") or "").strip()
-        if not record["id"] or not record["name"]:
-            raise ValueError(f"Every {kind[:-1]} record needs a non-empty id and name.")
-        record["lat"], record["lon"] = float(record["lat"]), float(record["lon"])
-        if not (-90 <= record["lat"] <= 90 and -180 <= record["lon"] <= 180):
-            raise ValueError(f"Invalid coordinates in {kind} record {record['id']}.")
-        if kind == "resources":
-            record["capacity"] = int(float(record["capacity"]))
-            record["status"] = str(record["status"]).strip().title()
-            if record["status"] not in {"Available", "Idle", "Standby", "Busy", "Unavailable"}:
-                raise ValueError(f"Unsupported status in resource {record['id']}.")
-            record["type"] = str(record["type"]).strip().lower()
-            record["capabilities"] = str(record["capabilities"]).strip()
-            record["source"] = "operator-verified-upload"
-            record["availability_status"] = "operator-reported"
-        elif kind == "hospitals":
-            record["available_beds"] = int(float(record["available_beds"]))
-            record["emergency_capability"] = str(record["emergency_capability"]).strip()
-            record["source"] = "operator-verified-upload"
-            record["source_type"] = "operator_verified_inventory"
-            record["availability_status"] = "operator-reported"
-        else:
-            record["capacity"] = int(float(record["capacity"]))
-            record["occupied"] = int(float(record["occupied"]))
-            record["source"] = "operator-verified-upload"
-        rows.append(record)
-    return rows
+def _distance_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    radius = 6371.0
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    dp, dl = math.radians(lat2 - lat1), math.radians(lon2 - lon1)
+    value = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
+    return radius * 2 * math.atan2(math.sqrt(value), math.sqrt(max(0.0, 1.0 - value)))
 
 
-st.markdown("### Connect operational inventory")
-st.caption(
-    "Upload current records supplied by authorized response and hospital partners. "
-    "The allocator uses team status, coordinates, capacity and capabilities. "
-    "Never upload example/demo records or private patient information."
-)
-st.markdown(
-    "Hospital location references: [Esri India Hospital Directory](https://livingatlas.esri.in/server/rest/services/LivingAtlas/IND_Hospital_Directory/MapServer/0). "
-    "This is a facility directory, not a live bed or ambulance feed."
-)
-if not inventory_admin_configured():
-    st.warning(
-        "Inventory management is locked because INVENTORY_ADMIN_TOKEN is not configured. "
-        "Add this secret in Streamlit Community Cloud settings before enabling uploads."
+def _nearby_public_services(lat: float, lon: float, radius_m: int = 15000) -> list[dict]:
+    """Find public-map-listed facilities; never infer live availability or dispatch status."""
+    query = f"""
+    [out:json][timeout:18];
+    (
+      nwr(around:{radius_m},{lat},{lon})[amenity~"^(hospital|clinic|doctors|police|fire_station)$"];
+      nwr(around:{radius_m},{lat},{lon})[emergency~"^(ambulance_station|fire_station|ambulance_centre|rescue_station)$"];
+    );
+    out center tags;
+    """
+    response = requests.post(
+        "https://overpass-api.de/api/interpreter",
+        data={"data": query},
+        headers={"User-Agent": "ResQ-AI public emergency service directory/1.0"},
+        timeout=22,
     )
-elif not st.session_state.get("inventory_admin_authenticated", False):
-    token_candidate = st.text_input("Inventory operator access token", type="password", key="inventory_admin_token_input")
-    if st.button("Unlock inventory management", key="unlock_inventory_management"):
-        if inventory_admin_token_matches(token_candidate):
-            st.session_state.inventory_admin_authenticated = True
-            st.success("Inventory management unlocked for this session.")
-            st.rerun()
-        else:
-            st.error("The inventory access token is incorrect.")
-if inventory_admin_configured() and st.session_state.get("inventory_admin_authenticated", False):
-    with st.expander("CSV format and inventory upload", expanded=not center.resources):
-        st.markdown(
-            "**Rescue teams/resources** — id,name,type,lat,lon,status,capacity,capabilities\n\n"
-            "Type examples: rescue_team, medical_rescue, ambulance, fire_response. "
-            "Status must be Available, Idle, Standby, Busy, or Unavailable.\n\n"
-            "**Hospitals** — id,name,lat,lon,available_beds,emergency_capability (yes/no/unknown).\n\n"
-            "**Shelters** — id,name,lat,lon,capacity,occupied."
-        )
-        resource_upload = st.file_uploader("Rescue-team / ambulance inventory CSV", type=["csv"], key="resource_inventory_upload")
-        hospital_upload = st.file_uploader("Verified hospital capacity CSV", type=["csv"], key="hospital_inventory_upload")
-        shelter_upload = st.file_uploader("Shelter capacity CSV", type=["csv"], key="shelter_inventory_upload")
-        if st.button("Save and recalculate inventory", type="primary", use_container_width=True):
-            try:
-                new_resources = _parse_inventory(resource_upload, "resources") if resource_upload else []
-                new_hospitals = _parse_inventory(hospital_upload, "hospitals") if hospital_upload else []
-                new_shelters = _parse_inventory(shelter_upload, "shelters") if shelter_upload else []
-                if not any([new_resources, new_hospitals, new_shelters]):
-                    st.warning("Choose at least one inventory CSV before saving.")
-                else:
-                    for attr, incoming in (
-                        ("resources", new_resources),
-                        ("hospitals", new_hospitals),
-                        ("shelters", new_shelters),
-                    ):
-                        if incoming:
-                            current = {str(item.get("id")): item for item in getattr(center, attr)}
-                            current.update({str(item["id"]): item for item in incoming})
-                            setattr(center, attr, list(current.values()))
-                    center.recalculate(reason="Operator inventory uploaded; allocations recalculated")
-                    persist(center)
-                    if is_configured():
-                        save_inventory({
-                            "resources": new_resources,
-                            "hospitals": new_hospitals,
-                            "shelters": new_shelters,
-                        })
-                        st.success("Inventory saved to Supabase and allocation recalculated.")
-                    else:
-                        st.warning("Inventory is active for this app session only. Configure DATABASE_URL and run migrations/002_operational_inventory.sql for persistence.")
-                    st.rerun()
-            except (ValueError, TypeError, KeyError, pd.errors.ParserError) as exc:
-                st.error(f"Inventory was not saved: {exc}")
-            except Exception as exc:
-                st.error(
-                    f"Inventory persistence failed ({type(exc).__name__}). Run "
-                    "migrations/002_operational_inventory.sql in Supabase; records remain session-only."
-                )
+    response.raise_for_status()
+    labels = {
+        "hospital": "Hospital", "clinic": "Clinic", "doctors": "Medical clinic",
+        "police": "Police station", "fire_station": "Fire station",
+        "ambulance_station": "Ambulance station", "ambulance_centre": "Ambulance centre",
+        "rescue_station": "Rescue station", "ambulance": "Ambulance service",
+    }
+    results = []
+    seen = set()
+    for item in response.json().get("elements", []):
+        tags = item.get("tags") or {}
+        name = str(tags.get("name") or tags.get("official_name") or "").strip()
+        if not name:
+            continue
+        coords = item if item.get("lat") is not None else (item.get("center") or {})
+        if coords.get("lat") is None or coords.get("lon") is None:
+            continue
+        kind = str(tags.get("amenity") or tags.get("emergency") or "emergency service")
+        phone = str(tags.get("contact:phone") or tags.get("phone") or tags.get("contact:mobile") or "").strip()
+        distance = _distance_km(lat, lon, float(coords["lat"]), float(coords["lon"]))
+        key = (name.casefold(), labels.get(kind, kind.replace("_", " ").title()))
+        if key in seen:
+            continue
+        seen.add(key)
+        results.append({
+            "name": name,
+            "type": labels.get(kind, kind.replace("_", " ").title()),
+            "distance_km": distance,
+            "phone": phone,
+            "source": "OpenStreetMap public directory",
+        })
+    return sorted(results, key=lambda row: row["distance_km"])[:30]
 
-if st.session_state.get("inventory_store_error"):
-    st.warning(str(st.session_state["inventory_store_error"]))
 
 active_incidents = [
     incident for incident in center.incidents
@@ -190,15 +116,6 @@ selected_id = st.selectbox(
 )
 incident = next((item for item in active_incidents if str(item.get("id")) == selected_id), {})
 
-# Automatically look up nearby public hospital facilities from the India hospital
-# directory. These are location references only, not live bed/dispatch availability.
-verified_hospitals = [
-    h for h in center.hospitals
-    if str(h.get("source_type") or "") != "public_reference_directory"
-]
-public_hospitals, hospital_lookup_error = nearby_public_hospitals(incident.get("lat"), incident.get("lon"))
-center.hospitals = verified_hospitals + public_hospitals
-center.recalculate(reason="Refreshed nearby hospital reference matches for selected incident")
 assignment = center.assignment_for(selected_id)
 
 raw_type = str(incident.get("disaster_type") or "").strip()
@@ -238,6 +155,57 @@ with detail_right:
     st.markdown("**Reported at**")
     st.write(str(incident.get("reported_at") or "Timestamp not available"))
 
+st.divider()
+st.markdown("### Nearby hospitals and emergency services")
+st.caption("Nearest first · distance is straight-line estimate. Public directory entries do not confirm live availability or dispatch readiness.")
+if lat is None or lon is None:
+    st.warning("This incident has no usable coordinates. Reopen the report and enter its location before searching nearby services.")
+else:
+    try:
+        with st.spinner("Searching public service directories near the incident…"):
+            nearby_services = _nearby_public_services(float(lat), float(lon))
+        if nearby_services:
+            for service in nearby_services:
+                service_cols = st.columns([3, 1, 2])
+                service_cols[0].markdown(f"**{service['name']}**")
+                service_cols[0].caption(service["type"])
+                service_cols[1].markdown(f"{service['distance_km']:.1f} km")
+                service_cols[2].markdown(service["phone"] if service["phone"] else "Contact number not listed")
+                if service["phone"]:
+                    service_cols[2].caption("Publicly listed number; call to confirm.")
+            st.caption("Source: OpenStreetMap public directory. Contact details are displayed only when listed; they are not independently phone-verified by ResQ-AI.")
+        else:
+            st.warning("No nearby hospitals or emergency-service locations were found in the public directory within 15 km. Contact local emergency services directly.")
+    except Exception:
+        st.warning("The public service directory could not be reached right now. No facilities or phone numbers have been invented. Please contact local emergency services directly.")
+
+st.markdown("### Verified rescue-team availability")
+available_resources = [
+    resource for resource in center.resources
+    if str(resource.get("status") or "").strip().lower() == "available"
+    and resource.get("source") in {"operator-verified-upload", "trusted-live-feed", "official-feed"}
+]
+if available_resources:
+    resource_rows = []
+    for resource in available_resources:
+        if resource.get("lat") is None or resource.get("lon") is None:
+            continue
+        resource_rows.append({
+            "name": str(resource.get("name") or resource.get("id") or "Unnamed team"),
+            "type": str(resource.get("type") or "Rescue team").replace("_", " ").title(),
+            "distance_km": _distance_km(float(lat), float(lon), float(resource["lat"]), float(resource["lon"])),
+            "phone": str(resource.get("phone") or resource.get("contact_phone") or "").strip(),
+        })
+    resource_rows.sort(key=lambda row: row["distance_km"])
+    for resource in resource_rows:
+        rc = st.columns([3, 1, 2])
+        rc[0].markdown(f"**{resource['name']}**")
+        rc[0].caption(resource["type"])
+        rc[1].markdown(f"{resource['distance_km']:.1f} km")
+        rc[2].markdown(resource["phone"] if resource["phone"] else "Contact number not listed")
+else:
+    st.info("No verified live rescue-team roster is connected. Public facility listings can show nearby fire/police/ambulance stations, but cannot confirm a specific team's availability or dispatch.")
+
 if is_unclassified:
     st.warning(
         "The saved report is not classified as a known hazard. ResQ-AI will not guess the incident type. "
@@ -257,15 +225,12 @@ if assignment and assignment.get("reason"):
 
 st.markdown("### Resource readiness")
 st.caption(
-    "Incident assessment and resource availability are separate. A priority score can be calculated "
-    "without a verified rescue-team, hospital, medicine, or shelter inventory."
+    "Incident assessment and resource availability are separate. Public facility listings do not show live bed capacity or confirm dispatch readiness."
 )
 
 counts = {
     "Active reported incidents": len(active_incidents),
     "Verified resource records loaded": len(center.resources),
-    "Verified hospital capacity records": len(verified_hospitals),
-    "Nearby public hospital matches": len(public_hospitals),
     "Shelter records loaded": len(center.shelters),
 }
 cols = st.columns(len(counts))
@@ -309,16 +274,6 @@ if assignment and (assignment.get("hospital_name") or assignment.get("hospital_i
             "This is a public facility-directory match, not a verified available bed or dispatch destination. "
             "Call the facility to confirm emergency capability and current capacity."
         )
-elif hospital_lookup_error:
-    st.warning(hospital_lookup_error)
-elif not public_hospitals and not verified_hospitals:
-    st.warning(
-        "No nearby hospital facility was returned for these coordinates. Verify the incident location "
-        "or upload a current hospital inventory from an authorized source."
-    )
-else:
-    st.info("Hospital records were found, but none is eligible for the current recommendation.")
-
 if center.shelters and assignment and (assignment.get("shelter_name") or assignment.get("shelter_id")):
     st.write("**Shelter candidate:** " + str(assignment.get("shelter_name") or assignment.get("shelter_id")))
 elif not center.shelters:
