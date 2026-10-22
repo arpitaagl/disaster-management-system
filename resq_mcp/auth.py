@@ -88,6 +88,5 @@ def auth_configuration() -> tuple[Auth0JWTVerifier, Any] | None:
         issuer_url=AnyHttpUrl(verifier.issuer),
         resource_server_url=AnyHttpUrl(public_url),
         required_scopes=[REQUIRED_SCOPE],
-        validate_token_resource=False,
     )
     return verifier, settings
