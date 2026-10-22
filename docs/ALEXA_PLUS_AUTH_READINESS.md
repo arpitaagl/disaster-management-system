@@ -15,10 +15,10 @@ This document records the implementation boundary; it does not claim that authen
 - [x] Tool descriptions warn that demo state is simulated and operational decisions require human verification.
 - [x] Local MCP client tests exercise tool argument mapping.
 - [ ] Public HTTPS deployment and operational monitoring.
-- [ ] Service-level OAuth authentication for the deployed MCP endpoint.
+- [x] Auth0 JWT verification and required-scope enforcement implemented on `phase3/alexa-service-auth` (pending local tests and review; not deployed).
 - [ ] Protected-resource metadata discovery (RFC 9728) and authorization-server metadata.
 - [ ] OAuth 2.1 authorization-code flow with PKCE S256 and the required resource/audience validation, if required for the selected Alexa+ integration.
-- [ ] Token validation, scopes, expiry, error responses, and negative security tests.
+- [x] Token signature, issuer, audience, expiry, subject, and `read:incidents` scope validation implemented with negative tests (pending local test run).
 - [ ] User account linking and refresh-token handling, if user-specific identity or data is introduced.
 - [ ] End-to-end verification with the official Alexa+ onboarding/toolkit flow.
 
@@ -47,3 +47,19 @@ This document records the implementation boundary; it does not claim that authen
 - [Alexa+ MCP Toolkit Account Linking](https://developer.amazon.com/docs/alexaplus/add-ons/mcp-toolkit-account-linking)
 - [RFC 9728: OAuth 2.0 Protected Resource Metadata](https://www.rfc-editor.org/rfc/rfc9728)
 - [RFC 8414: OAuth 2.0 Authorization Server Metadata](https://www.rfc-editor.org/rfc/rfc8414)
+
+## Auth0 resource-server configuration (branch implementation)
+
+The current branch adds an Auth0 JWT verifier to the MCP server. Authentication is enabled only when all three environment variables are set; a partial configuration prevents startup. If all three are absent, the server remains in local-development mode and **must not be exposed publicly**.
+
+Set these values in the deployment environment (never commit credentials):
+
+- `AUTH0_DOMAIN=arpitaagl.us.auth0.com` (hostname only, no scheme or path)
+- `AUTH0_AUDIENCE=https://resq-ai-mcp` (the Auth0 API Identifier)
+- `MCP_PUBLIC_URL=https://YOUR-DEPLOYED-HOST/YOUR-MCP-PATH` (replace with the exact public HTTPS MCP resource URL)
+
+The Auth0 API must define the `read:incidents` scope and the machine-to-machine application must be authorized to request it. Request a token using the Auth0 client-credentials flow with both `audience=https://resq-ai-mcp` and `scope=read:incidents`. Keep the client secret in deployment secrets/environment variables; it is not needed by the MCP resource server and must not be added to this repository.
+
+The verifier accepts only RS256-signed JWTs from the configured Auth0 issuer and validates signature, issuer, API audience, expiry, required claims, and scope. It fails closed if token verification or JWKS retrieval fails. The MCP SDK is also configured to bind verified tokens to the configured public resource URL.
+
+This is not yet a claim of production readiness: run the full test suite, confirm the deployed URL and metadata, verify the exact Alexa+ authentication contract, and complete end-to-end onboarding before public exposure.
