@@ -253,29 +253,75 @@ def render_live_disaster_intelligence() -> None:
                 mapped["Latitude"].between(5.0, 38.0)
                 & mapped["Longitude"].between(67.0, 98.0)
             ]
-            india_layer = pdk.Layer(
+            # Bounding boxes also include neighboring countries and offshore areas,
+            # so require an India label from the feed before plotting a record.
+            india_label = (
+                mapped["Area"].fillna("").astype(str).str.contains(r"\bindia\b", case=False, regex=True)
+                | mapped["Event"].fillna("").astype(str).str.contains(r"\bindia\b", case=False, regex=True)
+            )
+            mapped = mapped[india_label].reset_index(drop=True)
+            india_glow_layer = pdk.Layer(
                 "ScatterplotLayer",
+                id="india-incident-glow",
                 data=mapped,
                 get_position="[Longitude, Latitude]",
-                get_fill_color=[13, 148, 136, 190],
-                get_line_color=[255, 255, 255, 220],
-                get_radius=55000,
-                radius_min_pixels=5,
-                radius_max_pixels=16,
-                line_width_min_pixels=1,
+                get_fill_color=[255, 170, 0, 58],
+                get_radius=105000,
+                radius_min_pixels=13,
+                radius_max_pixels=28,
+                stroked=False,
+                pickable=False,
+            )
+            india_layer = pdk.Layer(
+                "ScatterplotLayer",
+                id="india-incident-markers",
+                data=mapped,
+                get_position="[Longitude, Latitude]",
+                get_fill_color=[255, 198, 0, 245],
+                get_line_color=[255, 255, 255, 255],
+                get_radius=50000,
+                radius_min_pixels=8,
+                radius_max_pixels=18,
+                line_width_min_pixels=2,
                 pickable=True,
                 auto_highlight=True,
             )
             india_view = pdk.ViewState(latitude=22.5, longitude=79.0, zoom=3.5, pitch=0)
             india_deck = pdk.Deck(
-                layers=[india_layer],
+                layers=[india_glow_layer, india_layer],
                 initial_view_state=india_view,
                 map_style="https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
                 tooltip={"text": "{Event}\n{Hazard}\n{Area}"},
             )
-            st.pydeck_chart(india_deck, use_container_width=True, height=460)
+            map_selection = st.pydeck_chart(
+                india_deck,
+                use_container_width=True,
+                height=460,
+                on_select="rerun",
+                selection_mode="single-object",
+                key="india-incident-map",
+            )
+            selected_objects = map_selection.selection.get("objects", {}).get("india-incident-markers", [])
+            if selected_objects:
+                selected_incident = selected_objects[0]
+                # Ignore an old selection if the user changes map filters.
+                if selected_incident.get("Event") in set(mapped["Event"].astype(str)):
+                    with st.container(border=True):
+                        st.markdown("#### Selected incident")
+                        detail_left, detail_right = st.columns(2)
+                        with detail_left:
+                            st.write("**Incident:**", selected_incident.get("Event", "Not provided"))
+                            st.write("**Hazard:**", selected_incident.get("Hazard", "Not provided"))
+                            st.write("**Area:**", selected_incident.get("Area", "Not provided"))
+                        with detail_right:
+                            st.write("**Alert / magnitude:**", selected_incident.get("Alert / magnitude", "Not reported"))
+                            st.write("**Event time (UTC):**", selected_incident.get("Event time (UTC)", "Not provided"))
+                            st.write("**Source:**", selected_incident.get("Source", "Not provided"))
+                        record_url = str(selected_incident.get("Record") or "")
+                        if record_url.startswith(("https://", "http://")):
+                            st.link_button("Open source record", record_url)
             st.caption(
-                f"{len(mapped)} filtered source events with coordinates inside India's approximate bounds. "
+                f"{len(mapped)} filtered source events explicitly labeled India and inside India's approximate bounds. "
                 "The event stream still includes records from all connected feeds."
             )
     with list_col:
