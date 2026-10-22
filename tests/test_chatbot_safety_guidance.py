@@ -404,3 +404,45 @@ def test_ambulance_availability_question_is_not_misclassified_as_dispatch():
     assert not chatbot._is_emergency_dispatch_request(
         "Which ambulance resources are available?"
     )
+
+
+def test_operational_record_questions_bypass_llm_and_use_snapshot(monkeypatch):
+    import components.chatbot as chatbot
+
+    monkeypatch.setattr(chatbot, "llm_configured", lambda: True)
+
+    def unexpected_llm_call(*args, **kwargs):
+        raise AssertionError("Operational record questions must use grounded snapshot answers")
+
+    monkeypatch.setattr(chatbot.LLMClient, "complete_json", unexpected_llm_call)
+    center = CommandCenter(bundle={
+        "incidents": [{"id": "EQ-1", "disaster_type": "Earthquake", "status": "Open",
+                       "priority_score": 71, "urgency": "High"}],
+        "resources": [{"id": "AMB-1", "name": "Ambulance 1", "status": "Available"}],
+        "hospitals": [{"id": "H-1", "name": "Central Hospital", "available_beds": 3,
+                       "total_beds": 10}],
+        "shelters": [{"id": "S-1", "name": "North Shelter", "capacity": 20, "occupied": 12}],
+        "roads": [], "events": [],
+    })
+
+    count = chatbot.answer_question("How many incidents were reported?", center)
+    assert "1 incident records" in count
+    assert "not necessarily a count of unique real-world events" in count
+
+    resources = chatbot.answer_question("Which ambulance resources are available?", center)
+    assert "1 resources" in resources
+    assert "AMB-1" in resources
+    assert "demo state" in resources
+
+
+def test_unknown_question_still_uses_llm_when_configured(monkeypatch):
+    import components.chatbot as chatbot
+
+    monkeypatch.setattr(chatbot, "llm_configured", lambda: True)
+
+    class FakeLLMClient:
+        def complete_json(self, system, prompt, timeout):
+            return '{"answer": "General answer"}'
+
+    monkeypatch.setattr(chatbot, "LLMClient", FakeLLMClient)
+    assert chatbot.answer_question("Explain how rainbows form", _empty_center()) == "General answer"
