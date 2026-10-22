@@ -246,22 +246,6 @@ if submitted:
         fact_cols[1].metric("Access", str(analysis.get("accessibility") or accessibility))
         fact_cols[2].metric("Vulnerable people", f"{incident.get('vulnerable_population') or 0:,}")
 
-        st.markdown("### Why this priority?")
-        st.caption("The score is calculated by predefined rules. It is decision support, not an automatic dispatch decision.")
-        for item in incident.get("priority_breakdown") or []:
-            label = str(item.get("label") or "Factor")
-            points = int(item.get("points") or 0)
-            detail = str(item.get("detail") or "")
-            col_label, col_points = st.columns([5, 1])
-            col_label.markdown(f"**{label}**")
-            col_label.caption(detail)
-            col_points.markdown(f"**+{points}**")
-            st.progress(min(100, max(0, points * 3)), text=f"{points} points")
-
-        action = incident.get("recommended_action") or "No recommended action available."
-        st.markdown("### Recommended response")
-        st.info(action)
-
         if assignment:
             st.markdown("### Resource and destination recommendation")
             rec_cols = st.columns(3)
