@@ -214,8 +214,8 @@ def _app_help(question: str) -> str | None:
         "purpose of resq",
     )):
         return (
-            "ResQ-AI helps disaster-response teams track incident reports, review priorities, check recorded resources and shelters, "
-            "and view connected public alerts. It supports coordination; it does not dispatch responders, and some data may be simulated."
+            "**Purpose of ResQ-AI:** It helps disaster-response teams track incidents, review priorities, check recorded resources and shelters, "
+            "and view connected public alerts. It supports coordination but does not dispatch responders; some data may be simulated."
         )
 
     report_verbs = ("report", "reporting", "submit", "submitting", "file", "filing", "create", "creating")
