@@ -180,10 +180,14 @@ location = location_text or (
 )
 # Prefer the address typed by the reporter. Older reports without a saved address use coordinates.
 if location_text:
+    # Never silently search an old/default coordinate when the typed address cannot be resolved.
+    lat, lon = None, None
     with st.spinner("Resolving the reported address for nearby-service search…"):
         resolved = _geocode_incident_location(location_text)
     if resolved:
         lat, lon = resolved
+    else:
+        st.warning("Could not locate this address automatically. Check the spelling or clear the location field to use the report's saved coordinates.")
 
 a, b, c, d = st.columns(4)
 score = incident.get("priority_score")
