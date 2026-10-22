@@ -1606,20 +1606,21 @@ def render_sidebar(center: CommandCenter) -> None:
 def render_header(center: CommandCenter, subtitle: str) -> None:
     ai_class = "ok" if "Active" in center.ai_mode else "warn"
     from pathlib import Path
+    import base64
 
     icon_path = Path(__file__).resolve().parents[1] / "assets" / "resq-chatbot-icon.png"
+    icon_src = "data:image/png;base64," + base64.b64encode(icon_path.read_bytes()).decode("ascii")
     st.markdown(
-        """
+        f"""
         <style>
         div[data-testid="stPopover"] { position: fixed !important; left: 1rem !important; bottom: 1rem !important; z-index: 1000002 !important; }
-        div[data-testid="stPopover"] > button { width: 74px !important; height: 74px !important; border-radius: 50% !important; border: 0 !important; padding: 0 !important; background: #399ed8 !important; box-shadow: 0 8px 22px rgba(15,23,42,.32) !important; }
+        div[data-testid="stPopover"] > button { width: 74px !important; height: 74px !important; border-radius: 50% !important; border: 0 !important; padding: 0 !important; font-size: 0 !important; color: transparent !important; background: #399ed8 url('{icon_src}') center / cover no-repeat !important; box-shadow: 0 8px 22px rgba(15,23,42,.32) !important; }
         div[data-testid="stPopover"] > button > div { display: none !important; }
         </style>
         """,
         unsafe_allow_html=True,
     )
-    with st.popover("💬", help="Open ResQ Assistant chat"):
-        st.image(str(icon_path), width=56)
+    with st.popover("", help="Open ResQ Assistant chat"):
         from components.chatbot import render_chatbot
         render_chatbot(center)
     st.markdown(
