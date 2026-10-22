@@ -29,8 +29,9 @@ mcp = FastMCP(
         "demo state, explain deterministic priority scores, and summarize reported capacity. "
         "Never claim the demo data is live. Never authorize dispatch or replace emergency authorities."
     ),
-    host=os.getenv("MCP_HOST", "127.0.0.1"),
-    port=int(os.getenv("MCP_PORT", "8000")),
+    # Render's proxy requires 0.0.0.0 and its injected PORT. Keep local overrides available.
+    host=os.getenv("MCP_HOST", "0.0.0.0"),
+    port=int(os.getenv("PORT", os.getenv("MCP_PORT", "8000"))),
     stateless_http=True,
     json_response=True,
     token_verifier=_auth_config[0] if _auth_config else None,
