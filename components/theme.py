@@ -1591,10 +1591,10 @@ def render_sidebar(center: CommandCenter) -> None:
         ("pages/7_Live_Government_Alerts.py", "◉", "Live Government Alerts"),
         ("pages/8_Incident_Operations.py", "⇄", "Incident Operations"),
         ("pages/9_Situation_Reports.py", "▤", "Situation Reports"),
-        ("pages/6_ResQ_Assistant.py", "🤖", "ResQ Assistant"),
     ]
     for page_path, glyph, label in nav_items:
         st.sidebar.page_link(page_path, label=f"{glyph}  {label}")
+    st.sidebar.page_link("pages/6_ResQ_Assistant.py", label="🤖  ResQ Assistant")
     st.sidebar.divider()
     st.sidebar.caption(DISCLAIMER)
 
@@ -1614,14 +1614,15 @@ def render_header(center: CommandCenter, subtitle: str) -> None:
     st.markdown(
         f"""
         <style>
-        div[data-testid="stPageLink"] {{ position:fixed !important; top:1rem !important; right:1.5rem !important; z-index:1000002 !important; width:58px !important; height:58px !important; }}
-        div[data-testid="stPageLink"] a {{ width:58px !important; height:58px !important; padding:0 !important; border:0 !important; border-radius:50% !important; overflow:hidden !important; background:url('{icon_src}') center/cover no-repeat !important; box-shadow:0 6px 18px rgba(15,23,42,.25) !important; }}
-        div[data-testid="stPageLink"] a > div {{ display:none !important; }}
+        .st-key-rx-assistant-fab div[data-testid="stPageLink"] {{ position:fixed !important; top:1rem !important; right:1.5rem !important; z-index:1000002 !important; width:58px !important; height:58px !important; }}
+        .st-key-rx-assistant-fab div[data-testid="stPageLink"] a {{ width:58px !important; height:58px !important; padding:0 !important; border:0 !important; border-radius:50% !important; overflow:hidden !important; background:url('{icon_src}') center/cover no-repeat !important; box-shadow:0 6px 18px rgba(15,23,42,.25) !important; }}
+        .st-key-rx-assistant-fab div[data-testid="stPageLink"] a > div {{ display:none !important; }}
         </style>
         """,
         unsafe_allow_html=True,
     )
-    st.page_link("pages/6_ResQ_Assistant.py", label="", icon="🤖", help="Open ResQ Assistant chat", width="content")
+    with st.container(key="rx-assistant-fab"):
+        st.page_link("pages/6_ResQ_Assistant.py", label="", icon="🤖", help="Open ResQ Assistant chat", width="content")
     st.markdown(
         f"""
         <div class="resq-header">

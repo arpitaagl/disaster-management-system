@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import pandas as pd
+import pydeck as pdk
 import requests
 import streamlit as st
 
@@ -241,16 +242,42 @@ def render_live_disaster_intelligence() -> None:
     map_col, list_col = st.columns([1.5, 1], gap="large")
     with map_col:
         with st.container(border=True):
-            st.markdown("### Global hazard map")
+            st.markdown("### India hazard map")
             mapped = filtered.dropna(subset=["Latitude", "Longitude"]).copy()
             mapped["Latitude"] = pd.to_numeric(mapped["Latitude"], errors="coerce")
             mapped["Longitude"] = pd.to_numeric(mapped["Longitude"], errors="coerce")
             mapped = mapped.dropna(subset=["Latitude", "Longitude"])
-            if not mapped.empty:
-                st.map(mapped.rename(columns={"Latitude": "lat", "Longitude": "lon"})[["lat", "lon"]], use_container_width=True)
-                st.caption(f"{len(mapped)} filtered events have usable coordinates.")
-            else:
-                st.info("No mapped events match the current filters.")
+            # Keep the map centered on India and show only source records whose
+            # coordinates fall within India's approximate geographic bounds.
+            mapped = mapped[
+                mapped["Latitude"].between(5.0, 38.0)
+                & mapped["Longitude"].between(67.0, 98.0)
+            ]
+            india_layer = pdk.Layer(
+                "ScatterplotLayer",
+                data=mapped,
+                get_position="[Longitude, Latitude]",
+                get_fill_color=[13, 148, 136, 190],
+                get_line_color=[255, 255, 255, 220],
+                get_radius=55000,
+                radius_min_pixels=5,
+                radius_max_pixels=16,
+                line_width_min_pixels=1,
+                pickable=True,
+                auto_highlight=True,
+            )
+            india_view = pdk.ViewState(latitude=22.5, longitude=79.0, zoom=3.5, pitch=0)
+            india_deck = pdk.Deck(
+                layers=[india_layer],
+                initial_view_state=india_view,
+                map_style="https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
+                tooltip={"text": "{Event}\n{Hazard}\n{Area}"},
+            )
+            st.pydeck_chart(india_deck, use_container_width=True, height=460)
+            st.caption(
+                f"{len(mapped)} filtered source events with coordinates inside India's approximate bounds. "
+                "The event stream still includes records from all connected feeds."
+            )
     with list_col:
         with st.container(border=True):
             st.markdown(f"### Event stream · {len(filtered)}")
