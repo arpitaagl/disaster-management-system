@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import math
+import requests
 import streamlit as st
 
 from components.session import get_center, persist
@@ -7,6 +9,68 @@ from components.theme import page_setup, render_header, render_sidebar
 from core.config import CITY_LAT, CITY_LON
 from core.persistence import is_configured, save_incident
 from utils.validation import validate_report
+
+def _distance_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Straight-line distance between two coordinates."""
+    radius = 6371.0
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    dp = math.radians(lat2 - lat1)
+    dl = math.radians(lon2 - lon1)
+    value = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
+    return radius * 2 * math.atan2(math.sqrt(value), math.sqrt(max(0.0, 1 - value)))
+
+
+def _find_nearby_services(lat: float, lon: float, radius_m: int = 10000) -> list[dict]:
+    """Find nearby public-map-listed hospitals and emergency services; no database required."""
+    query = f"""
+    [out:json][timeout:12];
+    (
+      nwr(around:{radius_m},{lat},{lon})[amenity~"^(hospital|clinic|doctors|fire_station|police)$"];
+      nwr(around:{radius_m},{lat},{lon})[emergency~"^(ambulance_station|fire_station|ambulance)$"];
+    );
+    out center tags;
+    """
+    response = requests.post(
+        "https://overpass-api.de/api/interpreter",
+        data={"data": query},
+        headers={"User-Agent": "ResQ-AI emergency-service finder/1.0"},
+        timeout=15,
+    )
+    response.raise_for_status()
+    services = []
+    for item in response.json().get("elements", []):
+        tags = item.get("tags") or {}
+        name = tags.get("name") or tags.get("official_name")
+        if not name:
+            continue
+        coords = item if item.get("lat") is not None else item.get("center") or {}
+        if coords.get("lat") is None or coords.get("lon") is None:
+            continue
+        kind = tags.get("amenity") or tags.get("emergency") or "emergency service"
+        kind_labels = {
+            "hospital": "Hospital", "clinic": "Clinic", "doctors": "Medical clinic",
+            "fire_station": "Fire station", "police": "Police station",
+            "ambulance_station": "Ambulance station", "ambulance": "Ambulance service",
+        }
+        phone = tags.get("contact:phone") or tags.get("phone") or tags.get("contact:mobile")
+        services.append({
+            "name": str(name),
+            "type": kind_labels.get(kind, kind.replace("_", " ").title()),
+            "distance_km": _distance_km(lat, lon, float(coords["lat"]), float(coords["lon"])),
+            "phone": str(phone).strip() if phone else "",
+            "source": "OpenStreetMap",
+        })
+    services.sort(key=lambda item: item["distance_km"])
+    # De-duplicate entries with the same name/type within a short distance.
+    unique = []
+    seen = set()
+    for service in services:
+        key = (service["name"].casefold(), service["type"], round(service["distance_km"], 1))
+        if key not in seen:
+            seen.add(key)
+            unique.append(service)
+    return unique[:15]
+
 
 page_setup("Report Incident")
 
@@ -116,6 +180,24 @@ if submitted:
             )
         else:
             st.caption("Database storage is not connected; this report is session-only.")
+
+        # Nearby services are fetched live from a public map directory; no Supabase is used.
+        st.markdown("### Nearby hospitals and emergency services")
+        try:
+            with st.spinner("Finding nearby hospitals and emergency services…"):
+                nearby_services = _find_nearby_services(float(lat), float(lon))
+            if not nearby_services:
+                st.warning("No nearby hospitals or emergency services were found in the public directory within 10 km. Contact local emergency services directly.")
+            else:
+                st.caption("Nearest first · straight-line distance · source: OpenStreetMap. Phone numbers are shown only when listed in the directory; verify before relying on them.")
+                for service in nearby_services:
+                    service_cols = st.columns([3, 1.2, 2])
+                    service_cols[0].markdown(f"**{service['name']}**")
+                    service_cols[0].caption(service["type"])
+                    service_cols[1].markdown(f"{service['distance_km']:.1f} km")
+                    service_cols[2].markdown(service["phone"] if service["phone"] else "Phone not listed")
+        except Exception:
+            st.warning("Nearby services could not be loaded from the public directory right now. Please contact local emergency services directly.")
 
         # Human-readable incident summary; raw structured output stays optional.
         st.markdown("### Incident assessment")
