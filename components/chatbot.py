@@ -18,7 +18,7 @@ Answer the user's actual question directly, including ordinary general-knowledge
 Use the supplied snapshot only for operational incident/resource facts; it is not a live government alert feed. Never invent incidents, resource availability, routes, capacities, or current warnings. If asked for a current fact you cannot verify, say so clearly.
 For disaster-safety questions, provide concise, conservative guidance and refer to relevant official sources when appropriate.
 Explain but never change deterministic priority scores. Never authorize dispatch or claim to contact responders. Direct people to local emergency services and official local instructions for immediate danger.
-Be conversational, useful, and concise. Return JSON with one string field named answer."""
+Keep answers short by default: usually 1–3 sentences. Answer the question first, and add detail only when asked or needed for safety. Avoid long introductions, repeated disclaimers, and unnecessary lists. Return JSON with one string field named answer."""
 
 
 def _snapshot(center: CommandCenter) -> dict[str, Any]:
@@ -214,14 +214,8 @@ def _app_help(question: str) -> str | None:
         "purpose of resq",
     )):
         return (
-            "**Purpose of ResQ-AI**\n\n"
-            "ResQ-AI is a disaster-response decision-support prototype designed to help teams organize incident reports, "
-            "review incident priority, inspect available resource and shelter records, view supported public alerts, "
-            "explore simulated scenarios, and prepare situation summaries. Its goal is to make response information easier "
-            "to understand and coordinate—not to replace emergency services or human decision-makers.\n\n"
-            "**Important limits:** some operational records or scenario results may be simulated or incomplete. "
-            "Live alerts depend on connected sources. Priority scores are decision support only; the app does not automatically "
-            "call emergency services or dispatch responders."
+            "**Purpose of ResQ-AI:** It helps disaster-response teams manage incident reports, review priorities, check recorded resources and shelters, "
+            "and view connected public alerts. It supports coordination but does not automatically dispatch responders; some data may be simulated."
         )
 
     report_verbs = ("report", "reporting", "submit", "submitting", "file", "filing", "create", "creating")
