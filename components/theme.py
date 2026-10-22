@@ -1550,15 +1550,14 @@ def inject_theme() -> None:
     is_dark = st.session_state.get("resq_theme", "Light") == "Dark"
     toggle_key = f"header_theme_toggle_{current_theme}"
 
-    # A compact toggle keeps the appearance control available without adding
-    # a duplicate selector to the sidebar or Settings page.
-    selected_dark = st.toggle(
-        "Dark mode",
-        value=is_dark,
+    # Keep the appearance toggle available without duplicating it in Settings.
+    if st.button(
+        "☀️ Light mode" if is_dark else "🌙 Dark mode",
         key=toggle_key,
         help="Switch between light and dark appearance.",
-    )
-    st.session_state["resq_theme"] = "Dark" if selected_dark else "Light"
+    ):
+        st.session_state["resq_theme"] = "Light" if current_theme == "Dark" else "Dark"
+        st.rerun()
 
     st.markdown(CSS, unsafe_allow_html=True)
     st.markdown(ENHANCED_CSS, unsafe_allow_html=True)
