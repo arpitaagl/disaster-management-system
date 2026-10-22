@@ -551,3 +551,37 @@ def test_dispatch_answer_never_claims_an_ambulance_was_sent(monkeypatch):
         assert "local emergency services" in answer.casefold(), question
         assert "cannot call responders" in answer.casefold(), question
         assert "sent an ambulance" not in answer.casefold(), question
+
+
+
+def test_answer_question_falls_back_when_llm_json_has_no_answer(monkeypatch):
+    import components.chatbot as chatbot
+
+    monkeypatch.setattr(chatbot, "llm_configured", lambda: True)
+
+    class MissingAnswerLLMClient:
+        def complete_json(self, system, prompt, timeout):
+            return '{"summary": "This is not the required answer field"}'
+
+    monkeypatch.setattr(chatbot, "LLMClient", MissingAnswerLLMClient)
+    answer = chatbot.answer_question("Summarize the response snapshot", _empty_center())
+
+    assert "active incidents" in answer.casefold()
+    assert "simulated data" in answer.casefold()
+    assert "This is not the required answer field" not in answer
+
+
+def test_answer_question_falls_back_when_llm_answer_is_blank(monkeypatch):
+    import components.chatbot as chatbot
+
+    monkeypatch.setattr(chatbot, "llm_configured", lambda: True)
+
+    class BlankAnswerLLMClient:
+        def complete_json(self, system, prompt, timeout):
+            return '{"answer": "   "}'
+
+    monkeypatch.setattr(chatbot, "LLMClient", BlankAnswerLLMClient)
+    answer = chatbot.answer_question("Summarize the response snapshot", _empty_center())
+
+    assert "active incidents" in answer.casefold()
+    assert "simulated data" in answer.casefold()
