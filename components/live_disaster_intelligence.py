@@ -10,7 +10,6 @@ import requests
 import streamlit as st
 
 from core.gdacs_feed import GDACS_SOURCE_URL, fetch_gdacs_events
-from core.live_feeds import USGS_ALL_DAY_URL, fetch_usgs_earthquakes
 from core.live_data import IMD_PUBLIC_CAP_URL, get_imd_live_data, get_ndma_cap_alerts
 from core.alert_translation import english_text
 
@@ -18,11 +17,6 @@ from core.alert_translation import english_text
 @st.cache_data(ttl=300, show_spinner=False)
 def _cached_gdacs(lookback_days: int) -> dict:
     return fetch_gdacs_events(lookback_days=lookback_days)
-
-
-@st.cache_data(ttl=300, show_spinner=False)
-def _cached_usgs() -> dict:
-    return fetch_usgs_earthquakes()
 
 
 def _is_india_incident(event: dict) -> bool:
@@ -50,7 +44,7 @@ def render_live_disaster_intelligence() -> None:
     st.markdown('<div class="resq-kicker">RESQ-AI / GLOBAL MONITORING</div>', unsafe_allow_html=True)
     st.title("Live Disaster Intelligence")
     st.caption(
-        "India-focused incidents from GDACS, USGS, IMD public CAP, and NDMA SACHET when their feeds provide India location details. "
+        "India-focused incidents from GDACS, IMD public CAP, and NDMA SACHET when their feeds provide India location details. "
         "These public feeds do not confirm local damage, casualties, or dispatch requirements."
     )
 
@@ -64,7 +58,6 @@ def render_live_disaster_intelligence() -> None:
         force_refresh = st.button("Refresh feeds", type="primary", use_container_width=True)
         if force_refresh:
             _cached_gdacs.clear()
-            _cached_usgs.clear()
 
     source_rows = []
     events = []
@@ -104,37 +97,6 @@ def render_live_disaster_intelligence() -> None:
             source_rows.append({
                 "Source": "GDACS", "Status": "Unavailable", "Events": "—",
                 "Retrieved by app (UTC)": "—", "Latest event update/start (UTC)": "—", "Official source": GDACS_SOURCE_URL,
-            })
-
-        try:
-            usgs = fetch_usgs_earthquakes() if force_refresh else _cached_usgs()
-            usgs_generated = usgs.get("feed_generated_at_utc", "Not provided")
-            source_rows.append({
-                "Source": "USGS Earthquake Hazards Program",
-                "Status": "Connected",
-                "Events": usgs.get("event_count", len(usgs.get("events", []))),
-                "Retrieved by app (UTC)": usgs.get("fetched_at_utc", "Not provided"),
-                "Source feed generated (UTC)": usgs_generated,
-                "Official source": USGS_ALL_DAY_URL,
-            })
-            for event in usgs.get("events", []):
-                magnitude = event.get("magnitude")
-                events.append({
-                    "Hazard": "Earthquake",
-                    "Event": event.get("location", "Location not provided"),
-                    "Area": "Not provided",
-                    "Alert / magnitude": f"Magnitude {magnitude}" if magnitude is not None else "Not reported",
-                    "Event time (UTC)": event.get("time_utc") or "Not provided",
-                    "Source": "USGS Earthquake Hazards Program",
-                    "Record": event.get("detail_url") or USGS_ALL_DAY_URL,
-                    "Latitude": event.get("latitude"),
-                    "Longitude": event.get("longitude"),
-                })
-        except (requests.RequestException, ValueError, TypeError) as exc:
-            failures.append(("USGS", type(exc).__name__, USGS_ALL_DAY_URL))
-            source_rows.append({
-                "Source": "USGS Earthquake Hazards Program", "Status": "Unavailable",
-                "Events": "—", "Retrieved by app (UTC)": "—", "Source feed generated (UTC)": "—", "Official source": USGS_ALL_DAY_URL,
             })
 
     # Include India-specific official feeds alongside global hazard feeds. Never invent
@@ -234,7 +196,7 @@ def render_live_disaster_intelligence() -> None:
     c1, c2, c3 = st.columns(3)
     c1.metric("India incidents", len(events))
     c2.metric("Feeds connected", f"{connected} / {len(source_rows)}")
-    c3.metric("Monitoring window", f"{lookback} days + USGS past day")
+    c3.metric("Monitoring window", f"Past {lookback} days")
 
     with st.expander("Data-source health", expanded=bool(failures) or force_refresh):
         health_df = pd.DataFrame(source_rows)
@@ -256,10 +218,10 @@ def render_live_disaster_intelligence() -> None:
             st.warning(f"{name} is unavailable ({reason}). No example events were substituted. [Open official source]({url})")
         st.caption(
             "India incident counts include only records explicitly located in India. App retrieval time means when this app received the response; it does not mean every event is new. "
-            "GDACS may continue listing ongoing alerts, while USGS provides a rolling past-day earthquake feed."
+            "GDACS may continue listing ongoing alerts."
         )
         if force_refresh:
-            st.success("Refresh requested: both feeds were fetched directly, bypassing the five-minute cache.")
+            st.success("Refresh requested: GDACS was fetched directly, bypassing the five-minute cache.")
         else:
             st.caption("This view automatically rechecks connected feeds every 5 minutes while the page remains open. Source adapters may cache responses for up to 5 minutes; no polling occurs when the app is closed.")
 
@@ -436,7 +398,7 @@ def render_live_disaster_intelligence() -> None:
 
     st.markdown("### Coverage and limitations")
     st.caption(
-        "GDACS provides multi-hazard global event reporting; USGS provides earthquakes from the past day. "
+        "GDACS provides multi-hazard event reporting. "
         "Feed availability and coverage vary by source. Public hazard feeds are not a substitute for official local warnings."
     )
     st.caption(

@@ -9,6 +9,6 @@ center = get_center()
 render_sidebar(center)
 render_header(
     center,
-    "Monitor source-reported global hazards from GDACS and USGS, with interactive filters and official source records.",
+    "Monitor source-reported hazards from GDACS and India government alert feeds, with interactive filters and official source records.",
 )
 render_live_disaster_intelligence()
