@@ -379,3 +379,28 @@ def test_chatbot_intent_collisions_route_to_the_right_answer(monkeypatch):
     alerts_answer = chatbot.answer_question("Are these live government alerts?", center)
     assert "Live Government Alerts" in alerts_answer
     assert "not itself a live government-alert feed" in alerts_answer
+
+
+def test_dispatch_request_natural_variations_get_emergency_guidance():
+    import components.chatbot as chatbot
+
+    center = _empty_center()
+    questions = (
+        "Could you please get medical help here?",
+        "Can someone arrange paramedics?",
+        "I need an ambulance urgently",
+        "please dispatch emergency medical help",
+    )
+    for question in questions:
+        answer = chatbot.answer_question(question, center)
+        assert "local emergency services" in answer
+        assert "cannot call responders" in answer
+        assert "active incidents" not in answer
+
+
+def test_ambulance_availability_question_is_not_misclassified_as_dispatch():
+    import components.chatbot as chatbot
+
+    assert not chatbot._is_emergency_dispatch_request(
+        "Which ambulance resources are available?"
+    )
