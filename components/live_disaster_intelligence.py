@@ -66,6 +66,42 @@ def _approximate_india_coordinates(area: str) -> tuple[float, float] | None:
     return None
 
 
+def _hazard_name(title: str, summary: str, fallback: str = "Weather alert") -> str:
+    """Prefer the hazard described by the alert over its severity rating."""
+    text = f"{title} {summary}".casefold()
+    hazard_terms = (
+        ("Tropical cyclone", ("tropical cyclone", "cyclone", "hurricane", "typhoon")),
+        ("Flood", ("flood", "inundat")),
+        ("Heavy rainfall", ("heavy rain", "rainfall", "precipitation")),
+        ("Thunderstorm", ("thunderstorm", "thunder storm", "lightning")),
+        ("Heatwave", ("heatwave", "heat wave", "extreme heat")),
+        ("Cold wave", ("cold wave", "coldwave", "cold weather")),
+        ("Landslide", ("landslide", "mudslide")),
+        ("Earthquake", ("earthquake", "seismic")),
+        ("Drought", ("drought", "dry spell", "water scarcity")),
+        ("Wildfire", ("wildfire", "forest fire")),
+        ("Tsunami", ("tsunami",)),
+        ("Snowfall", ("snowfall", "heavy snow", "blizzard")),
+    )
+    for label, terms in hazard_terms:
+        if any(term in text for term in terms):
+            return label
+    return fallback
+
+
+def _india_marker_coordinates(area: str, index: int) -> tuple[float, float]:
+    """Use a state centroid, or a labeled country-center fallback when location is vague."""
+    coordinates = _approximate_india_coordinates(area)
+    if coordinates:
+        return coordinates
+    # Separate otherwise coincident country-level alerts; these are explicitly
+    # labeled as approximate and do not claim to be event coordinates.
+    offsets = ((0.0, 0.0), (0.34, 0.0), (-0.34, 0.0), (0.0, 0.42), (0.0, -0.42),
+               (0.34, 0.42), (-0.34, 0.42), (0.34, -0.42), (-0.34, -0.42))
+    lat_offset, lon_offset = offsets[index % len(offsets)]
+    return 22.5 + lat_offset, 79.0 + lon_offset
+
+
 @st.fragment(run_every=300)
 def render_live_disaster_intelligence() -> None:
     st.markdown('<div class="resq-kicker">RESQ-AI / GLOBAL MONITORING</div>', unsafe_allow_html=True)
@@ -141,22 +177,22 @@ def render_live_disaster_intelligence() -> None:
             "Latest event update/start (UTC)": "Not provided",
             "Official source": public_result.get("source_url") or IMD_PUBLIC_CAP_URL,
         })
-        for row in imd_alerts:
+        for alert_index, row in enumerate(imd_alerts):
             title = english_text(row.get("title", ""))
             if not title:
                 continue
             summary = english_text(row.get("summary", ""))
             area = english_text(row.get("area", ""))
             events.append({
-                "Hazard": english_text(row.get("severity", "")) or "Government alert",
+                "Hazard": _hazard_name(title, summary),
                 "Event": title,
                 "Area": area or "Location not provided",
                 "Alert / magnitude": summary or "See official alert",
                 "Event time (UTC)": row.get("published") or "Not provided",
                 "Source": "India Meteorological Department — public CAP",
                 "Record": row.get("link") or public_result.get("source_url") or IMD_PUBLIC_CAP_URL,
-                "Latitude": (_approximate_india_coordinates(area) or (None, None))[0],
-                "Longitude": (_approximate_india_coordinates(area) or (None, None))[1],
+                "Latitude": _india_marker_coordinates(area, alert_index)[0],
+                "Longitude": _india_marker_coordinates(area, alert_index)[1],
             })
     except (requests.RequestException, ValueError, TypeError):
         source_rows.append({
@@ -177,22 +213,22 @@ def render_live_disaster_intelligence() -> None:
             "Latest event update/start (UTC)": "Not provided",
             "Official source": ndma.get("source_url") or "https://sachet.ndma.gov.in/",
         })
-        for row in ndma_alerts:
+        for alert_index, row in enumerate(ndma_alerts):
             title = english_text(row.get("title", ""))
             if not title:
                 continue
             summary = english_text(row.get("summary", ""))
             area = english_text(row.get("area", ""))
             events.append({
-                "Hazard": english_text(row.get("severity", "")) or "Government alert",
+                "Hazard": _hazard_name(title, summary),
                 "Event": title,
                 "Area": area or "Location not provided",
                 "Alert / magnitude": summary or "See official alert",
                 "Event time (UTC)": row.get("published") or "Not provided",
                 "Source": "NDMA SACHET / CAP",
                 "Record": row.get("link") or ndma.get("source_url") or "https://sachet.ndma.gov.in/",
-                "Latitude": (_approximate_india_coordinates(area) or (None, None))[0],
-                "Longitude": (_approximate_india_coordinates(area) or (None, None))[1],
+                "Latitude": _india_marker_coordinates(area, alert_index)[0],
+                "Longitude": _india_marker_coordinates(area, alert_index)[1],
             })
     except (requests.RequestException, ValueError, TypeError):
         source_rows.append({
@@ -315,7 +351,10 @@ def render_live_disaster_intelligence() -> None:
                 ("Drought", "#eab308", [234, 179, 8, 245], ("drought", "dry spell", "water scarcity")),
                 ("Earthquake", "#8b5cf6", [139, 92, 246, 245], ("earthquake", "seismic")),
                 ("Cyclone", "#06b6d4", [6, 182, 212, 245], ("cyclone", "hurricane", "typhoon")),
+                ("Heavy rainfall", "#2563eb", [37, 99, 235, 245], ("heavy rainfall", "heavy rain", "rainfall", "precipitation")),
                 ("Storm", "#3b82f6", [59, 130, 246, 245], ("storm", "thunder", "lightning")),
+                ("Heatwave", "#f59e0b", [245, 158, 11, 245], ("heatwave", "heat wave", "extreme heat")),
+                ("Cold / snow", "#38bdf8", [56, 189, 248, 245], ("cold wave", "coldwave", "snowfall", "heavy snow", "blizzard")),
                 ("Wildfire", "#f97316", [249, 115, 22, 245], ("wildfire", "forest fire")),
                 ("Landslide", "#22c55e", [34, 197, 94, 245], ("landslide", "mudslide")),
                 ("Other", "#ec4899", [236, 72, 153, 245], ()),
@@ -331,14 +370,6 @@ def render_live_disaster_intelligence() -> None:
                 return hazard_palette[-1][2]
 
             mapped["Marker color"] = mapped.apply(marker_color, axis=1)
-            # Ensure the two visible incident markers are clearly distinct on the map.
-            # Use north/south position for the requested upper-cyan, lower-red treatment.
-            north_index = mapped["Latitude"].idxmax() if not mapped.empty else None
-            south_index = mapped["Latitude"].idxmin() if not mapped.empty else None
-            if north_index is not None:
-                mapped.at[north_index, "Marker color"] = [6, 182, 212, 245]
-            if south_index is not None:
-                mapped.at[south_index, "Marker color"] = [239, 68, 68, 245]
             # Use numeric accessor fields instead of a list-valued dataframe column;
             # map each channel independently so empty source results stay valid too.
             mapped["marker_r"] = mapped["Marker color"].map(lambda color: color[0])
@@ -407,11 +438,11 @@ def render_live_disaster_intelligence() -> None:
                             "India Meteorological Department — public CAP", "NDMA SACHET / CAP"
                         }
                         location_text = str(selected_incident.get("Area") or "India")
-                        precision_note = " · approximate state-center location" if approximate else ""
+                        precision_note = " · approximate marker; feed did not provide precise coordinates" if approximate else ""
                         st.write("**Location:**", f"{location_text} ({lat:.3f}, {lon:.3f}){precision_note}")
             st.caption(
                 f"{len(mapped)} filtered source events explicitly labeled India and inside India's approximate bounds. "
-                "India government alerts without coordinates use an approximate state-center marker. Only India-located records are shown in the event stream."
+                "Government alerts without coordinates use an approximate state or India-level marker, labeled as approximate when selected. Only India-located records are shown in the event stream."
             )
     with list_col:
         with st.container(border=True):
