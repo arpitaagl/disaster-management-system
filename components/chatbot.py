@@ -13,12 +13,12 @@ from core.llm_client import LLMClient, llm_configured
 from core.state import CommandCenter
 from components.voice_assistant import voice_assistant
 
-SYSTEM_PROMPT = """You are ResQ Assistant, a disaster-response decision-support assistant.
-Use the supplied snapshot only for operational incident/resource facts; it is not a live government alert feed.
-For general safety questions, provide concise, conservative preparedness guidance and link official sources included in the answer.
-Never invent incidents, resource availability, routes, capacities, or current warnings. Explain but never change deterministic priority scores.
-Never authorize dispatch or claim to contact responders. Direct people to local emergency services and official local instructions for immediate danger.
-Be concise and calm. Return JSON with one string field named answer."""
+SYSTEM_PROMPT = """You are ResQ Assistant, a helpful general-purpose conversational assistant embedded in ResQ-AI, a disaster-response decision-support application.
+Answer the user's actual question directly, including ordinary general-knowledge questions, explanations, app-purpose questions, writing help, and follow-up questions. Do not force every question into a short list of supported topics and do not answer unrelated questions with a generic capability menu.
+Use the supplied snapshot only for operational incident/resource facts; it is not a live government alert feed. Never invent incidents, resource availability, routes, capacities, or current warnings. If asked for a current fact you cannot verify, say so clearly.
+For disaster-safety questions, provide concise, conservative guidance and refer to relevant official sources when appropriate.
+Explain but never change deterministic priority scores. Never authorize dispatch or claim to contact responders. Direct people to local emergency services and official local instructions for immediate danger.
+Be conversational, useful, and concise. Return JSON with one string field named answer."""
 
 
 def _snapshot(center: CommandCenter) -> dict[str, Any]:
@@ -200,6 +200,30 @@ def _app_help(question: str) -> str | None:
     """Answer common how-to questions using the repository's actual app workflow."""
     q = question.casefold()
     tokens = _intent_tokens(q)
+
+    # Explain the product's purpose explicitly, including common voice phrasing.
+    if any(phrase in q for phrase in (
+        "what is the purpose of this application",
+        "what is the purpose of this app",
+        "what is this application for",
+        "what is this app for",
+        "why was this app made",
+        "what problem does resq solve",
+        "what is resq ai",
+        "explain resq ai",
+        "purpose of resq",
+    )):
+        return (
+            "**Purpose of ResQ-AI**\n\n"
+            "ResQ-AI is a disaster-response decision-support prototype designed to help teams organize incident reports, "
+            "review incident priority, inspect available resource and shelter records, view supported public alerts, "
+            "explore simulated scenarios, and prepare situation summaries. Its goal is to make response information easier "
+            "to understand and coordinate—not to replace emergency services or human decision-makers.\n\n"
+            "**Important limits:** some operational records or scenario results may be simulated or incomplete. "
+            "Live alerts depend on connected sources. Priority scores are decision support only; the app does not automatically "
+            "call emergency services or dispatch responders."
+        )
+
     report_verbs = ("report", "reporting", "submit", "submitting", "file", "filing", "create", "creating")
     incident_terms = {
         "incident", "incidents", "emergency", "emergencies", "disaster", "disasters",
@@ -480,9 +504,11 @@ def _fallback(question: str, center: CommandCenter) -> str:
         )
 
     return (
-        "I am not sure I understood that question. Try asking about incident counts, reporting an incident, "
-        "incident priorities, resources, shelters, app navigation, or disaster-safety guidance. "
-        "For immediate danger, contact local emergency services."
+        "I can still help with ResQ-AI's purpose, app workflows, and the operational records available in this session. "
+        "A general-purpose AI model is not currently available for this question, so I don't want to guess or give you a made-up answer. "
+        "The app is designed to organize incident reports, explain deterministic priorities, review resource/shelter records, "
+        "show connected public alerts, and support disaster planning. "
+        "For immediate danger, contact local emergency services; this assistant cannot call or dispatch responders."
     )
 
 
