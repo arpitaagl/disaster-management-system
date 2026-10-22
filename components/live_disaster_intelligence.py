@@ -48,16 +48,17 @@ def render_live_disaster_intelligence() -> None:
         "These public feeds do not confirm local damage, casualties, or dispatch requirements."
     )
 
-    controls, refresh_slot = st.columns([4, 1], vertical_alignment="bottom")
-    with controls:
-        lookback = st.selectbox(
-            "GDACS event window", [7, 30, 90], index=1,
-            format_func=lambda value: f"Past {value} days",
-        )
-    with refresh_slot:
-        force_refresh = st.button("Refresh feeds", type="primary", use_container_width=True)
-        if force_refresh:
-            _cached_gdacs.clear()
+    with st.container(border=True, key="live-feed-controls"):
+        controls, refresh_slot = st.columns([4, 1], vertical_alignment="bottom")
+        with controls:
+            lookback = st.selectbox(
+                "GDACS event window", [7, 30, 90], index=1,
+                format_func=lambda value: f"Past {value} days",
+            )
+        with refresh_slot:
+            force_refresh = st.button("Refresh feeds", type="primary", use_container_width=True)
+            if force_refresh:
+                _cached_gdacs.clear()
 
     source_rows = []
     events = []
@@ -193,10 +194,11 @@ def render_live_disaster_intelligence() -> None:
     source_rows = india_health_rows
 
     connected = sum(row["Status"] == "Connected" for row in source_rows)
-    c1, c2, c3 = st.columns(3)
-    c1.metric("India incidents", len(events))
-    c2.metric("Feeds connected", f"{connected} / {len(source_rows)}")
-    c3.metric("Monitoring window", f"Past {lookback} days")
+    with st.container(key="india-incident-metrics"):
+        c1, c2, c3 = st.columns(3)
+        c1.metric("India incidents", len(events))
+        c2.metric("Feeds connected", f"{connected} / {len(source_rows)}")
+        c3.metric("Monitoring window", f"Past {lookback} days")
 
     with st.expander("Data-source health", expanded=bool(failures) or force_refresh):
         health_df = pd.DataFrame(source_rows)
@@ -249,8 +251,12 @@ def render_live_disaster_intelligence() -> None:
         filtered = filtered[filtered["Hazard"] == selected_hazard]
     if selected_source != "All sources":
         filtered = filtered[filtered["Source"] == selected_source]
-    if query.strip():
-        term = query.strip().casefold()
+    search_terms = [
+        term.casefold()
+        for term in (query.strip(), str(st.session_state.get("resq_global_search") or "").strip())
+        if term
+    ]
+    for term in search_terms:
         searchable = filtered[["Hazard", "Event", "Area", "Alert / magnitude", "Source"]].fillna("").astype(str)
         filtered = filtered[searchable.apply(lambda col: col.str.casefold().str.contains(term, regex=False)).any(axis=1)]
 

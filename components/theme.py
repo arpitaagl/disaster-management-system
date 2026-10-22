@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import streamlit as st
+from html import escape
 
 from core.config import DISCLAIMER
 from core.llm_client import llm_configured
@@ -1540,6 +1541,260 @@ section[data-testid="stSidebar"] [data-testid="stSidebarNav"] a[aria-current="pa
 """
 
 
+REFERENCE_CSS = """
+<style>
+/* Light, high-clarity command center inspired by the supplied dashboard reference. */
+:root {
+  color-scheme: light !important;
+  --resq-ink: #17344f !important;
+  --resq-muted: #66809a !important;
+  --resq-border: #d8e6f1 !important;
+  --resq-panel: #ffffff !important;
+  --resq-canvas: #f3f8fc !important;
+  --resq-blue: #1461a4 !important;
+  --resq-teal: #0c9b96 !important;
+}
+.stApp,
+[data-testid="stAppViewContainer"],
+[data-testid="stMain"],
+[data-testid="stMainBlockContainer"] {
+  color: var(--resq-ink) !important;
+  background: linear-gradient(135deg, #f3f8fc 0%, #eef6fb 56%, #eaf4f9 100%) !important;
+}
+header[data-testid="stHeader"] { background: rgba(255,255,255,.92) !important; }
+[data-testid="stMainBlockContainer"] { padding-top: 0 !important; }
+section[data-testid="stSidebar"] {
+  background: linear-gradient(180deg, #f8fcff 0%, #eef7fb 65%, #e6f3f8 100%) !important;
+  border-right: 1px solid #d5e5ef !important;
+  box-shadow: 5px 0 22px rgba(25,76,112,.045) !important;
+}
+section[data-testid="stSidebar"] > div { padding: 1.05rem .8rem 1.4rem !important; }
+section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p,
+section[data-testid="stSidebar"] [data-testid="stCaptionContainer"],
+section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] strong { color: #607c97 !important; }
+section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] h3 { color: #244664 !important; }
+section[data-testid="stSidebar"] hr { border-color: #d4e3ed !important; }
+.rx-sidebar-brand {
+  background: linear-gradient(140deg, #ffffff, #e9f8f7 75%, #edf7fd) !important;
+  border: 1px solid #cee5ec !important;
+  box-shadow: 0 8px 20px rgba(31,90,120,.06) !important;
+}
+.rx-brand-name { color: #17344f !important; }
+.rx-brand-tag { color: #6f8aa2 !important; }
+.rx-brand-line { background: #d7e7ed !important; }
+.rx-brand-status { color: #52748d !important; }
+section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] strong {
+  background: #e4f6f4 !important;
+  border: 1px solid #cdebe5 !important;
+  color: #167f7b !important;
+}
+[data-testid="stSidebarNav"] a {
+  color: #466582 !important;
+  border: 1px solid transparent !important;
+  border-radius: 11px !important;
+  min-height: 42px !important;
+  padding: .58rem .7rem !important;
+}
+[data-testid="stSidebarNav"] a:hover {
+  color: #145f7d !important;
+  background: #e4f3f6 !important;
+  border-color: #d0e9ec !important;
+  transform: translateX(2px);
+}
+[data-testid="stSidebarNav"] a[aria-current="page"] {
+  color: #ffffff !important;
+  background: linear-gradient(100deg, #087ba2, #0bb0a1) !important;
+  border-color: transparent !important;
+  border-left: 0 !important;
+  box-shadow: 0 7px 16px rgba(11,143,157,.17) !important;
+}
+[data-testid="stSidebarNav"] a[aria-current="page"] * { color: #ffffff !important; }
+section[data-testid="stSidebar"] [data-testid="stPageLink"] a {
+  display: flex !important;
+  min-height: 42px !important;
+  align-items: center !important;
+  padding: .58rem .7rem !important;
+  border: 1px solid transparent !important;
+  border-radius: 11px !important;
+  color: #466582 !important;
+  text-decoration: none !important;
+}
+section[data-testid="stSidebar"] [data-testid="stPageLink"] a:hover {
+  color: #145f7d !important;
+  background: #e4f3f6 !important;
+  border-color: #d0e9ec !important;
+}
+section[data-testid="stSidebar"] [data-testid="stPageLink"] a[aria-current="page"] {
+  color: #ffffff !important;
+  background: linear-gradient(100deg, #087ba2, #0bb0a1) !important;
+  box-shadow: 0 7px 16px rgba(11,143,157,.17) !important;
+}
+section[data-testid="stSidebar"] [data-testid="stPageLink"] a[aria-current="page"] * { color: #ffffff !important; }
+.rx-sidebar-note {
+  background: rgba(255,255,255,.76) !important;
+  border: 1px solid #d8e8f0 !important;
+  border-radius: 13px !important;
+  box-shadow: 0 5px 15px rgba(25,76,112,.035) !important;
+  padding: 13px 12px !important;
+  margin-top: 14px;
+}
+.rx-sidebar-note strong { display: block; margin-bottom: 5px; color: #244664 !important; }
+.rx-sidebar-note p { margin: 0; color: #66809a !important; font-size: 11px; line-height: 1.5 !important; }
+.rx-sidebar-footer {
+  display: flex; align-items: center; gap: 10px; margin: 20px -4px -4px;
+  padding: 16px 12px 5px; color: #66809a; font-size: 11px; line-height: 1.5;
+  border-top: 1px solid #d8e8f0;
+}
+.rx-sidebar-footer > span { color: #0a9a94; font-size: 24px; }
+.rx-sidebar-footer b { color: #47718e; }
+.st-key-resq-global-search { margin-top: -1.2rem; margin-bottom: -.65rem; position: relative; z-index: 3; }
+.st-key-resq-global-search [data-testid="stTextInput"] { max-width: 670px; }
+.st-key-resq-global-search [data-baseweb="input"] {
+  min-height: 42px !important;
+  border: 0 !important;
+  border-radius: 12px !important;
+  background: #edf4fa !important;
+  box-shadow: inset 0 1px 2px rgba(21,63,96,.035) !important;
+}
+.st-key-resq-global-search input { color: #254a6a !important; font-size: 13px !important; }
+.st-key-resq-global-search input::placeholder { color: #7b93a9 !important; opacity: 1 !important; }
+.resq-header {
+  position: relative !important;
+  isolation: isolate;
+  min-height: 228px !important;
+  padding: 27px 28px 25px !important;
+  margin: 0 0 21px !important;
+  overflow: hidden !important;
+  border: 1px solid rgba(40,177,195,.30) !important;
+  border-radius: 19px !important;
+  background: linear-gradient(112deg, #06486b 0%, #075c72 56%, #0e5473 100%) !important;
+  box-shadow: 0 13px 30px rgba(9,65,91,.15) !important;
+}
+.resq-header::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  top: -56px;
+  right: 9%;
+  width: 440px;
+  height: 330px;
+  opacity: .55;
+  background:
+    radial-gradient(ellipse at 52% 54%, rgba(21,195,201,.22) 0 8%, transparent 8.5%),
+    radial-gradient(ellipse at 52% 54%, transparent 0 19%, rgba(62,210,207,.33) 19.3% 19.7%, transparent 20%),
+    radial-gradient(ellipse at 52% 54%, transparent 0 34%, rgba(62,210,207,.20) 34.3% 34.7%, transparent 35%),
+    radial-gradient(ellipse at 52% 54%, transparent 0 49%, rgba(62,210,207,.16) 49.3% 49.7%, transparent 50%),
+    repeating-linear-gradient(0deg, transparent 0 31px, rgba(142,231,235,.055) 32px),
+    repeating-linear-gradient(90deg, transparent 0 39px, rgba(142,231,235,.045) 40px);
+  border-radius: 50%;
+  pointer-events: none;
+}
+.resq-header::after {
+  content: "";
+  position: absolute;
+  right: calc(9% + 205px);
+  top: 48%;
+  width: 17px;
+  height: 17px;
+  border-radius: 50% 50% 50% 0;
+  background: #ff6a58;
+  box-shadow: 0 0 0 8px rgba(255,106,88,.17), 0 0 0 20px rgba(255,106,88,.10), 0 0 22px rgba(255,106,88,.62);
+  transform: rotate(-45deg);
+  pointer-events: none;
+}
+.resq-header > div:first-child { position: relative; z-index: 1; max-width: min(68%, 760px); }
+.resq-header .resq-kicker { color: #8cf3df !important; letter-spacing: .14em; }
+.resq-header .resq-title {
+  max-width: 520px;
+  margin-top: 4px !important;
+  color: #ffffff !important;
+  font-size: clamp(30px, 3.15vw, 45px) !important;
+  line-height: 1.08 !important;
+  letter-spacing: -.035em !important;
+}
+.resq-header .resq-sub { max-width: 640px; margin-top: 10px; color: #e2f4fb !important; font-size: 15px; line-height: 1.5; }
+.resq-header .resq-pills { position: absolute; z-index: 2; top: 20px; right: 19px; max-width: 48%; gap: 7px; }
+.resq-header .pill { border-radius: 999px; padding: 7px 12px; font-size: 9px; letter-spacing: .015em; }
+.resq-header .pill.warn { color: #ffe39a !important; background: rgba(80,55,4,.28) !important; border-color: rgba(255,207,80,.75) !important; }
+.resq-header .pill.ok { color: #c9fff1 !important; background: rgba(5,113,102,.30) !important; border-color: rgba(47,230,190,.72) !important; }
+.resq-header .pill.bad { color: #ffd4d1 !important; background: rgba(132,38,44,.35) !important; border-color: rgba(255,142,137,.72) !important; }
+.resq-header::after { transform: rotate(-45deg) !important; }
+[data-testid="stMainBlockContainer"] h1,
+[data-testid="stMainBlockContainer"] h2,
+[data-testid="stMainBlockContainer"] h3,
+[data-testid="stMainBlockContainer"] h4 { color: #173c5b !important; }
+[data-testid="stMainBlockContainer"] [data-testid="stMarkdownContainer"] p,
+[data-testid="stMainBlockContainer"] [data-testid="stCaptionContainer"] { color: #66809a !important; }
+[data-testid="stMainBlockContainer"] [data-testid="stMetric"] {
+  min-height: 116px !important;
+  padding: 17px 19px !important;
+  border: 1px solid #d9e8f2 !important;
+  border-radius: 16px !important;
+  background: #ffffff !important;
+  box-shadow: 0 8px 22px rgba(34,83,116,.055) !important;
+}
+[data-testid="stMainBlockContainer"] [data-testid="stMetricLabel"] { color: #355875 !important; }
+[data-testid="stMainBlockContainer"] [data-testid="stMetricValue"] { color: #123d78 !important; }
+.st-key-india-incident-metrics [data-testid="stHorizontalBlock"] > div:nth-child(1) [data-testid="stMetric"] {
+  background: linear-gradient(135deg, #fff7f7, #ffffff 76%) !important;
+  border-color: #ffd5d6 !important;
+}
+.st-key-india-incident-metrics [data-testid="stHorizontalBlock"] > div:nth-child(2) [data-testid="stMetric"] {
+  background: linear-gradient(135deg, #f2f8ff, #ffffff 76%) !important;
+  border-color: #cfe3ff !important;
+}
+.st-key-india-incident-metrics [data-testid="stHorizontalBlock"] > div:nth-child(3) [data-testid="stMetric"] {
+  background: linear-gradient(135deg, #f8f5ff, #ffffff 76%) !important;
+  border-color: #e3d8ff !important;
+}
+.st-key-india-incident-metrics [data-testid="stMetricLabel"] p { display: flex; align-items: center; }
+.st-key-india-incident-metrics [data-testid="stHorizontalBlock"] > div:nth-child(1) [data-testid="stMetricLabel"] p::before,
+.st-key-india-incident-metrics [data-testid="stHorizontalBlock"] > div:nth-child(2) [data-testid="stMetricLabel"] p::before,
+.st-key-india-incident-metrics [data-testid="stHorizontalBlock"] > div:nth-child(3) [data-testid="stMetricLabel"] p::before {
+  display: inline-flex; align-items: center; justify-content: center; flex: 0 0 27px;
+  width: 27px; height: 27px; margin-right: 9px; border-radius: 50%; font-size: 15px;
+}
+.st-key-india-incident-metrics [data-testid="stHorizontalBlock"] > div:nth-child(1) [data-testid="stMetricLabel"] p::before { content: "!"; color: #e93e42; background: #ffe3e3; }
+.st-key-india-incident-metrics [data-testid="stHorizontalBlock"] > div:nth-child(2) [data-testid="stMetricLabel"] p::before { content: "↗"; color: #1474d4; background: #dceeff; }
+.st-key-india-incident-metrics [data-testid="stHorizontalBlock"] > div:nth-child(3) [data-testid="stMetricLabel"] p::before { content: "◷"; color: #7955d9; background: #e9e1ff; }
+.st-key-live-feed-controls [data-testid="stVerticalBlockBorderWrapper"] {
+  border-radius: 13px !important;
+  background: rgba(255,255,255,.78) !important;
+}
+[data-testid="stMainBlockContainer"] [data-testid="stVerticalBlockBorderWrapper"],
+[data-testid="stMainBlockContainer"] [data-testid="stExpander"] {
+  border-color: #d6e6ef !important;
+  background: rgba(255,255,255,.82) !important;
+  box-shadow: 0 5px 18px rgba(33,83,119,.045) !important;
+}
+[data-testid="stMainBlockContainer"] [data-testid="stSelectbox"] [data-baseweb="select"] > div,
+[data-testid="stMainBlockContainer"] [data-testid="stTextInput"] [data-baseweb="input"] {
+  background: #ffffff !important;
+  border-color: #d5e4ef !important;
+  color: #234763 !important;
+}
+[data-testid="stMainBlockContainer"] [data-testid="stTextInput"] input { color: #234763 !important; }
+[data-testid="stMainBlockContainer"] .stButton > button[kind="primary"] {
+  color: #ffffff !important;
+  background: linear-gradient(105deg, #0a8491, #0b9f94) !important;
+  border: 0 !important;
+  box-shadow: 0 7px 17px rgba(11,143,148,.16) !important;
+}
+[data-testid="stMainBlockContainer"] [data-testid="stDataFrame"],
+[data-testid="stMainBlockContainer"] [data-testid="stTable"] { border-color: #d8e6ef !important; }
+@media (max-width: 850px) {
+  .resq-header { min-height: 0 !important; padding: 20px 17px !important; }
+  .resq-header > div:first-child { max-width: 100%; padding-top: 40px; }
+  .resq-header .resq-title { font-size: 29px !important; }
+  .resq-header .resq-pills { left: 17px; right: auto; top: 13px; max-width: calc(100% - 34px); justify-content: flex-start; }
+  .resq-header::before { right: -230px; opacity: .25; }
+  .resq-header::after { display: none; }
+  [data-testid="stMainBlockContainer"] [data-testid="stMetric"] { min-height: 96px !important; padding: 13px !important; }
+}
+</style>
+"""
+
+
 def inject_theme() -> None:
     # Keep the selected theme in the URL so it survives a browser refresh
     # and navigation between Streamlit pages. Session state alone is reset
@@ -1554,6 +1809,7 @@ def inject_theme() -> None:
     st.markdown(CSS, unsafe_allow_html=True)
     st.markdown(ENHANCED_CSS, unsafe_allow_html=True)
     st.markdown(POLISH_CSS, unsafe_allow_html=True)
+    st.markdown(REFERENCE_CSS, unsafe_allow_html=True)
 
 
 def page_setup(title: str) -> None:
@@ -1595,8 +1851,19 @@ def render_sidebar(center: CommandCenter) -> None:
     ]
     for page_path, glyph, label in nav_items:
         st.sidebar.page_link(page_path, label=f"{glyph}  {label}")
-    st.sidebar.divider()
-    st.sidebar.caption(DISCLAIMER)
+    st.sidebar.markdown(
+        f"""
+        <div class="rx-sidebar-note">
+          <strong>ResQ-AI</strong>
+          <p>{escape(DISCLAIMER)}</p>
+        </div>
+        <div class="rx-sidebar-footer">
+          <span aria-hidden="true">◈</span>
+          <div><b>Safer Communities</b><br/>Stronger Tomorrow</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
     if llm_configured():
         st.sidebar.caption("AI analysis: model connection configured")
@@ -1604,7 +1871,7 @@ def render_sidebar(center: CommandCenter) -> None:
         pass  # No LLM-status notice in the sidebar.
 
 
-def render_header(center: CommandCenter, subtitle: str) -> None:
+def render_header(center: CommandCenter, subtitle: str, *, search_enabled: bool = False) -> None:
     ai_class = "ok" if "Active" in center.ai_mode else "warn"
     from pathlib import Path
     import base64
@@ -1623,6 +1890,16 @@ def render_header(center: CommandCenter, subtitle: str) -> None:
     )
     with st.container(key="rx-assistant-fab"):
         st.page_link("pages/6_ResQ_Assistant.py", label="", icon="🤖", help="Open ResQ Assistant chat", width="content")
+    if search_enabled:
+        with st.container(key="resq-global-search"):
+            search_col, _ = st.columns([.58, .42], gap="small")
+            with search_col:
+                st.text_input(
+                    "Search incidents, locations, or events",
+                    key="resq_global_search",
+                    placeholder="Search incidents, locations, or events...",
+                    label_visibility="collapsed",
+                )
     st.markdown(
         f"""
         <div class="resq-header">
@@ -1635,6 +1912,7 @@ def render_header(center: CommandCenter, subtitle: str) -> None:
             <div class="pill {ai_class}">{center.ai_mode}</div>
             <div class="pill ok">SYSTEM STATUS: OPERATIONAL</div>
           </div>
+          <div class="resq-hero-visual" aria-hidden="true"><span></span></div>
         </div>
         """,
         unsafe_allow_html=True,

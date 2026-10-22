@@ -10,5 +10,6 @@ render_sidebar(center)
 render_header(
     center,
     "Monitor source-reported hazards from GDACS and India government alert feeds, with interactive filters and official source records.",
+    search_enabled=True,
 )
 render_live_disaster_intelligence()
