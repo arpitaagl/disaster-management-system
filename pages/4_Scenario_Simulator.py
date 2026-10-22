@@ -77,14 +77,29 @@ def _nearby_public_services(lat: float, lon: float, radius_m: int = 15000) -> li
     )
     payload = None
     last_error = None
+    # Overpass mirrors can rate-limit POST requests. Try POST, then GET on each
+    # mirror before reporting a total lookup failure.
     for endpoint in endpoints:
-        try:
-            response = requests.post(endpoint, data={"data": query}, headers=headers, timeout=(4, 12))
-            response.raise_for_status()
-            payload = response.json()
+        for method in ("post", "get"):
+            try:
+                if method == "post":
+                    response = requests.post(
+                        endpoint, data={"data": query}, headers=headers, timeout=(4, 15)
+                    )
+                else:
+                    response = requests.get(
+                        endpoint, params={"data": query}, headers=headers, timeout=(4, 15)
+                    )
+                response.raise_for_status()
+                candidate = response.json()
+                if isinstance(candidate, dict) and isinstance(candidate.get("elements"), list):
+                    payload = candidate
+                    break
+                last_error = ValueError("Unexpected response from public map directory")
+            except (requests.RequestException, ValueError) as exc:
+                last_error = exc
+        if payload is not None:
             break
-        except (requests.RequestException, ValueError) as exc:
-            last_error = exc
     if payload is None:
         raise requests.RequestException("All public map directory endpoints failed") from last_error
 
@@ -158,8 +173,9 @@ location_override = st.text_input(
     "Incident location for nearby-service search",
     value=saved_location_text,
     placeholder="e.g., Sector 80, Noida",
-    help="ResQ-AI searches this address first. For older reports, enter the location here because earlier versions did not save the typed address.",
+    help="Enter or correct the incident address to search for nearby hospitals and response stations.",
 )
+search_location_text = location_override.strip()
 
 assignment = center.assignment_for(selected_id)
 
@@ -172,13 +188,13 @@ try:
 except (TypeError, ValueError):
     people_label = str(people or "Not provided")
 lat, lon = incident.get("lat"), incident.get("lon")
-location_text = str(incident.get("location_text") or "").strip()
+location_text = search_location_text
 location = location_text or (
     f"{lat}, {lon}"
     if lat is not None and lon is not None
     else "Location not available"
 )
-# Prefer the address typed by the reporter. Older reports without a saved address use coordinates.
+# Prefer the address currently entered in the search field. If cleared, use saved coordinates.
 if location_text:
     # Never silently search an old/default coordinate when the typed address cannot be resolved.
     lat, lon = None, None
