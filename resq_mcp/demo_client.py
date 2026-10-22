@@ -32,6 +32,7 @@ async def run_demo(args: argparse.Namespace) -> int:
                 tools_result = await session.list_tools()
                 tool_names = [tool.name for tool in tools_result.tools]
                 print(f"Connected to MCP server: {initialized.serverInfo.name}")
+                print(f"Negotiated MCP protocol version: {initialized.protocolVersion}")
                 print("Discovered tools:", ", ".join(tool_names))
 
                 if args.tool not in tool_names:
