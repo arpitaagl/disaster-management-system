@@ -375,6 +375,9 @@ def render_live_disaster_intelligence() -> None:
             mapped["marker_r"] = mapped["Marker color"].map(lambda color: color[0])
             mapped["marker_g"] = mapped["Marker color"].map(lambda color: color[1])
             mapped["marker_b"] = mapped["Marker color"].map(lambda color: color[2])
+            mapped["core_r"] = (mapped["marker_r"] * 0.62).astype(int)
+            mapped["core_g"] = (mapped["marker_g"] * 0.62).astype(int)
+            mapped["core_b"] = (mapped["marker_b"] * 0.62).astype(int)
             legend_items = "".join(
                 f'<span style="display:inline-flex;align-items:center;gap:.38rem;margin:0 .8rem .4rem 0;white-space:nowrap;">'
                 f'<i style="width:.72rem;height:.72rem;border-radius:50%;background:{color};box-shadow:0 0 9px {color};display:inline-block;"></i>{label}</span>'
@@ -386,13 +389,25 @@ def render_live_disaster_intelligence() -> None:
             )
             india_glow_layer = pdk.Layer(
                 "ScatterplotLayer",
-                id="india-incident-glow",
+                id="india-incident-outer-glow",
                 data=mapped,
                 get_position="[Longitude, Latitude]",
-                get_fill_color="[marker_r, marker_g, marker_b, 62]",
-                get_radius=32000,
-                radius_min_pixels=3,
-                radius_max_pixels=8,
+                get_fill_color="[marker_r, marker_g, marker_b, 38]",
+                get_radius=52000,
+                radius_min_pixels=7,
+                radius_max_pixels=13,
+                stroked=False,
+                pickable=False,
+            )
+            india_bloom_layer = pdk.Layer(
+                "ScatterplotLayer",
+                id="india-incident-bloom",
+                data=mapped,
+                get_position="[Longitude, Latitude]",
+                get_fill_color="[marker_r, marker_g, marker_b, 105]",
+                get_radius=30000,
+                radius_min_pixels=4,
+                radius_max_pixels=9,
                 stroked=False,
                 pickable=False,
             )
@@ -401,18 +416,18 @@ def render_live_disaster_intelligence() -> None:
                 id="india-incident-markers",
                 data=mapped,
                 get_position="[Longitude, Latitude]",
-                get_fill_color="[marker_r, marker_g, marker_b, 245]",
+                get_fill_color="[core_r, core_g, core_b, 255]",
                 get_line_color=[255, 255, 255, 255],
-                get_radius=22000,
-                radius_min_pixels=4,
-                radius_max_pixels=8,
+                get_radius=14000,
+                radius_min_pixels=3,
+                radius_max_pixels=6,
                 line_width_min_pixels=1,
                 pickable=True,
                 auto_highlight=True,
             )
             india_view = pdk.ViewState(latitude=22.5, longitude=79.0, zoom=3.5, pitch=0)
             india_deck = pdk.Deck(
-                layers=[india_glow_layer, india_layer],
+                layers=[india_glow_layer, india_bloom_layer, india_layer],
                 initial_view_state=india_view,
                 map_style="https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
             )
