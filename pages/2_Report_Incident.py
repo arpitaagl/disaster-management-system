@@ -14,11 +14,6 @@ center = get_center()
 render_sidebar(center)
 render_header(center, "Submit an emergency report · NLP extracts facts · the priority engine scores independently")
 
-st.info(
-    "The language model (or fallback keyword engine) extracts structured facts. "
-    "It does not choose the final rescue unit. Priority scoring and assignment are deterministic."
-)
-
 # The map component is temporarily omitted from the reporting form.
 # Users can enter the incident landmark and coordinates directly below.
 lat = float(CITY_LAT)
