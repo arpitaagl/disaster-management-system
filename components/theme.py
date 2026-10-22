@@ -1613,10 +1613,10 @@ def render_header(center: CommandCenter, subtitle: str) -> None:
     st.markdown(
         f"""
         <style>
-        .resq-assistant-link {{ position: fixed; top: 1rem; right: 1.5rem; z-index: 1000002; width: 58px; height: 58px; border-radius: 50%; overflow: hidden; display: block; box-shadow: 0 6px 18px rgba(15,23,42,.25); }}
-        .resq-assistant-link img {{ width: 100%; height: 100%; display: block; object-fit: cover; }}
+        .resq-assistant-link {{ position:fixed;top:1rem;right:1.5rem;z-index:1000002;width:58px;height:58px;display:block;border-radius:50%;overflow:hidden;box-shadow:0 6px 18px rgba(15,23,42,.25); }}
+        .resq-assistant-link img {{ width:100%;height:100%;object-fit:cover;display:block; }}
         </style>
-        <a class="resq-assistant-link" href="/6_ResQ_Assistant" target="_blank" rel="noopener" title="Open ResQ Assistant chat" aria-label="Open ResQ Assistant chat"><img src="{icon_src}" alt="ResQ Assistant"></a>
+        <a class="resq-assistant-link" href="/ResQ%20Assistant" target="_blank" rel="noopener" title="Open ResQ Assistant chat" aria-label="Open ResQ Assistant chat"><img src="{icon_src}" alt="ResQ Assistant"></a>
         """,
         unsafe_allow_html=True,
     )
