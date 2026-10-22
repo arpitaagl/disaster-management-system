@@ -33,23 +33,36 @@ def _distance_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     return radius * 2 * math.atan2(math.sqrt(value), math.sqrt(max(0.0, 1.0 - value)))
 
 
+@st.cache_data(ttl=600, show_spinner=False)
 def _nearby_public_services(lat: float, lon: float, radius_m: int = 15000) -> list[dict]:
-    """Find public-map-listed facilities; never infer live availability or dispatch status."""
+    """Find public-map-listed facilities through multiple Overpass mirrors."""
     query = f"""
-    [out:json][timeout:18];
+    [out:json][timeout:12];
     (
       nwr(around:{radius_m},{lat},{lon})[amenity~"^(hospital|clinic|doctors|police|fire_station)$"];
       nwr(around:{radius_m},{lat},{lon})[emergency~"^(ambulance_station|fire_station|ambulance_centre|rescue_station)$"];
     );
     out center tags;
     """
-    response = requests.post(
+    headers = {"User-Agent": "ResQ-AI public emergency service directory/1.0 (disaster response prototype)"}
+    endpoints = (
         "https://overpass-api.de/api/interpreter",
-        data={"data": query},
-        headers={"User-Agent": "ResQ-AI public emergency service directory/1.0"},
-        timeout=22,
+        "https://overpass.kumi.systems/api/interpreter",
+        "https://overpass.private.coffee/api/interpreter",
     )
-    response.raise_for_status()
+    payload = None
+    last_error = None
+    for endpoint in endpoints:
+        try:
+            response = requests.post(endpoint, data={"data": query}, headers=headers, timeout=(4, 12))
+            response.raise_for_status()
+            payload = response.json()
+            break
+        except (requests.RequestException, ValueError) as exc:
+            last_error = exc
+    if payload is None:
+        raise requests.RequestException("All public map directory endpoints failed") from last_error
+
     labels = {
         "hospital": "Hospital", "clinic": "Clinic", "doctors": "Medical clinic",
         "police": "Police station", "fire_station": "Fire station",
@@ -58,7 +71,7 @@ def _nearby_public_services(lat: float, lon: float, radius_m: int = 15000) -> li
     }
     results = []
     seen = set()
-    for item in response.json().get("elements", []):
+    for item in payload.get("elements", []):
         tags = item.get("tags") or {}
         name = str(tags.get("name") or tags.get("official_name") or "").strip()
         if not name:
@@ -179,16 +192,33 @@ else:
     except Exception:
         st.warning("The public service directory could not be reached right now. No facilities or phone numbers have been invented. Please contact local emergency services directly.")
 
-st.markdown("### Verified rescue-team availability")
-available_resources = [
+st.markdown("### Nearby emergency response stations")
+st.caption("Fire, police and ambulance facilities are shown as public-directory leads, not as confirmed dispatch-ready teams.")
+response_station_types = {"Fire station", "Police station", "Ambulance station", "Ambulance centre", "Rescue station", "Ambulance service"}
+response_stations = [
+    service for service in (nearby_services if lat is not None and lon is not None and "nearby_services" in locals() else [])
+    if service["type"] in response_station_types
+]
+if response_stations:
+    for service in response_stations:
+        rc = st.columns([3, 1, 2])
+        rc[0].markdown(f"**{service['name']}**")
+        rc[0].caption(service["type"])
+        rc[1].markdown(f"{service['distance_km']:.1f} km")
+        rc[2].markdown(service["phone"] if service["phone"] else "Contact number not listed")
+    st.caption("These listings do not verify whether a crew is on duty, equipped, or available to dispatch.")
+else:
+    st.info("No nearby response stations could be confirmed from the public directory in this lookup. This is not proof that no stations exist. ResQ-AI has no connected live roster to verify individual rescue teams.")
+verified_resources = [
     resource for resource in center.resources
     if str(resource.get("status") or "").strip().lower() == "available"
     and resource.get("source") in {"operator-verified-upload", "trusted-live-feed", "official-feed"}
 ]
-if available_resources:
+if verified_resources:
+    st.markdown("**Connected verified resource records**")
     resource_rows = []
-    for resource in available_resources:
-        if resource.get("lat") is None or resource.get("lon") is None:
+    for resource in verified_resources:
+        if resource.get("lat") is None or resource.get("lon") is None or lat is None or lon is None:
             continue
         resource_rows.append({
             "name": str(resource.get("name") or resource.get("id") or "Unnamed team"),
@@ -196,15 +226,12 @@ if available_resources:
             "distance_km": _distance_km(float(lat), float(lon), float(resource["lat"]), float(resource["lon"])),
             "phone": str(resource.get("phone") or resource.get("contact_phone") or "").strip(),
         })
-    resource_rows.sort(key=lambda row: row["distance_km"])
-    for resource in resource_rows:
+    for resource in sorted(resource_rows, key=lambda row: row["distance_km"]):
         rc = st.columns([3, 1, 2])
         rc[0].markdown(f"**{resource['name']}**")
         rc[0].caption(resource["type"])
         rc[1].markdown(f"{resource['distance_km']:.1f} km")
         rc[2].markdown(resource["phone"] if resource["phone"] else "Contact number not listed")
-else:
-    st.info("No verified live rescue-team roster is connected. Public facility listings can show nearby fire/police/ambulance stations, but cannot confirm a specific team's availability or dispatch.")
 
 if is_unclassified:
     st.warning(
