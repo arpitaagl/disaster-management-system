@@ -99,8 +99,67 @@ def _nearby_public_services(lat: float, lon: float, radius_m: int = 25000) -> li
                 last_error = exc
         if payload is not None:
             break
+    labels = {
+        "hospital": "Hospital", "clinic": "Clinic", "doctors": "Medical clinic",
+        "police": "Police station", "fire_station": "Fire station",
+        "ambulance_station": "Ambulance station", "ambulance_centre": "Ambulance centre",
+        "rescue_station": "Rescue station", "ambulance": "Ambulance service",
+    }
+
+    # Fallback: query Nominatim's public map search within a bounded box if all
+    # Overpass mirrors are unavailable. These are directory leads, not live teams.
+    fallback_rows = []
     if payload is None:
-        raise requests.RequestException("All public map directory endpoints failed") from last_error
+        headers["Accept-Language"] = "en"
+        lat_delta = radius_m / 1000 / 110.574
+        cos_lat = max(0.2, abs(math.cos(math.radians(lat))))
+        lon_delta = radius_m / 1000 / (111.320 * cos_lat)
+        viewbox = f"{lon - lon_delta},{lat + lat_delta},{lon + lon_delta},{lat - lat_delta}"
+        for term, service_type in (
+            ("hospital", "Hospital"),
+            ("clinic", "Medical clinic"),
+            ("police station", "Police station"),
+            ("fire station", "Fire station"),
+            ("ambulance station", "Ambulance station"),
+            ("rescue station", "Rescue station"),
+        ):
+            try:
+                response = requests.get(
+                    "https://nominatim.openstreetmap.org/search",
+                    params={
+                        "q": term, "format": "jsonv2", "limit": 10,
+                        "viewbox": viewbox, "bounded": 1,
+                        "addressdetails": 0,
+                    },
+                    headers=headers,
+                    timeout=(3, 8),
+                )
+                response.raise_for_status()
+                entries = response.json()
+                if not isinstance(entries, list):
+                    continue
+                for entry in entries:
+                    name = str(entry.get("name") or "").strip()
+                    if not name:
+                        continue
+                    item_lat, item_lon = float(entry["lat"]), float(entry["lon"])
+                    fallback_rows.append({
+                        "name": name,
+                        "type": service_type,
+                        "distance_km": _distance_km(lat, lon, item_lat, item_lon),
+                        "phone": "",
+                        "source": "OpenStreetMap Nominatim public directory",
+                    })
+            except (requests.RequestException, ValueError, TypeError, KeyError):
+                continue
+        if not fallback_rows:
+            raise requests.RequestException("Overpass and Nominatim public directories are unavailable") from last_error
+        unique = {}
+        for row in fallback_rows:
+            key = (row["name"].casefold(), row["type"])
+            if key not in unique or row["distance_km"] < unique[key]["distance_km"]:
+                unique[key] = row
+        return sorted(unique.values(), key=lambda row: row["distance_km"])[:30]
 
     labels = {
         "hospital": "Hospital", "clinic": "Clinic", "doctors": "Medical clinic",
