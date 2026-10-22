@@ -78,14 +78,19 @@ if submitted:
             incident = result["incident"]
             assignment = result["assignment"]
 
-            try:
-                saved_permanently = save_incident(incident, analysis, assignment)
-            except Exception as exc:
-                # Keep the current-session report visible, but never claim it was saved.
-                save_error = type(exc).__name__
+            # Persistence is optional for the submission build. If the database
+            # is not configured or could not be reached at session startup, keep the
+            # report usable in this session and defer durable storage setup.
+            if st.session_state.get("incident_store_configured", False):
+                try:
+                    saved_permanently = save_incident(incident, analysis, assignment)
+                except Exception as exc:
+                    # Keep the current-session report visible, but never claim it was saved.
+                    save_error = type(exc).__name__
 
             persist(center)
-            st.session_state.incident_store_configured = is_configured()
+            if not st.session_state.get("incident_store_configured", False):
+                saved_permanently = False
             if saved_permanently:
                 st.session_state.incident_store_error = None
                 status.update(label="Analysis complete · report saved", state="complete")
