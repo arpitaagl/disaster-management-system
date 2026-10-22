@@ -112,7 +112,8 @@
       if (!componentReady) { init(window.__streamlitArgs); componentReady = true; }
     }
   });
-  send("streamlit:componentReady", {apiVersion: 1});
+  // Streamlit expects apiVersion as a top-level field on componentReady, not inside value.
+  window.parent.postMessage({isStreamlitMessage: true, type: "streamlit:componentReady", apiVersion: 1}, "*");
   setHeight();
 })();
 </script>
