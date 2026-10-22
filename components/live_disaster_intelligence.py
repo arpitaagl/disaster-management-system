@@ -343,9 +343,11 @@ def render_live_disaster_intelligence() -> None:
                 mapped.at[north_index, "Marker color"] = [6, 182, 212, 245]
             if south_index is not None:
                 mapped.at[south_index, "Marker color"] = [239, 68, 68, 245]
-            mapped["Glow color"] = mapped["Marker color"].map(
-                lambda color: [color[0], color[1], color[2], 62]
-            )
+            # Use numeric accessor fields instead of a list-valued dataframe column;
+            # deck.gl reliably reads these columns when serializing Streamlit charts.
+            mapped[["marker_r", "marker_g", "marker_b"]] = pd.DataFrame(
+                mapped["Marker color"].tolist(), index=mapped.index
+            ).iloc[:, :3]
             legend_items = "".join(
                 f'<span style="display:inline-flex;align-items:center;gap:.38rem;margin:0 .8rem .4rem 0;white-space:nowrap;">'
                 f'<i style="width:.72rem;height:.72rem;border-radius:50%;background:{color};box-shadow:0 0 9px {color};display:inline-block;"></i>{label}</span>'
@@ -360,7 +362,7 @@ def render_live_disaster_intelligence() -> None:
                 id="india-incident-glow",
                 data=mapped,
                 get_position="[Longitude, Latitude]",
-                get_fill_color="Glow color",
+                get_fill_color="[marker_r, marker_g, marker_b, 62]",
                 get_radius=60000,
                 radius_min_pixels=6,
                 radius_max_pixels=14,
@@ -372,7 +374,7 @@ def render_live_disaster_intelligence() -> None:
                 id="india-incident-markers",
                 data=mapped,
                 get_position="[Longitude, Latitude]",
-                get_fill_color="Marker color",
+                get_fill_color="[marker_r, marker_g, marker_b, 245]",
                 get_line_color=[255, 255, 255, 255],
                 get_radius=28000,
                 radius_min_pixels=4,
