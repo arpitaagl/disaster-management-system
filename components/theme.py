@@ -323,10 +323,18 @@ div[data-testid="stMetricValue"] {
   box-shadow: 0 3px 10px rgba(36,87,197,.10);
   transform: translateY(-1px);
 }
-.stButton > button[kind="primary"], [data-testid="stFormSubmitButton"] > button[kind="primary"] {
+.stButton > button[kind="primary"],
+.stButton > button[kind="primary"]:disabled,
+.stButton > button[kind="primary"]:disabled *,
+[data-testid="stFormSubmitButton"] > button[kind="primary"],
+[data-testid="stFormSubmitButton"] > button[kind="primary"]:disabled,
+[data-testid="stFormSubmitButton"] > button[kind="primary"]:disabled * {
   background: var(--resq-blue);
   border-color: var(--resq-blue);
-  color: #fff;
+  color: #fff !important;
+  -webkit-text-fill-color: #fff !important;
+  font-weight: 700 !important;
+  opacity: 1 !important;
 }
 input, textarea, [data-baseweb="select"] > div {
   border-radius: 10px !important;
