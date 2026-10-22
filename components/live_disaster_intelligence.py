@@ -381,7 +381,7 @@ def render_live_disaster_intelligence() -> None:
                 ("Earthquake", "#8b5cf6", [139, 92, 246, 245], ("earthquake", "seismic")),
                 ("Cyclone", "#06b6d4", [6, 182, 212, 245], ("cyclone", "hurricane", "typhoon")),
                 ("Heavy rainfall", "#2563eb", [37, 99, 235, 245], ("heavy rainfall", "heavy rain", "rainfall", "precipitation")),
-                ("Storm", "#3b82f6", [59, 130, 246, 245], ("storm", "thunder", "lightning")),
+                ("Storm", "#4f46e5", [79, 70, 229, 245], ("storm", "thunder", "lightning")),
                 ("Heatwave", "#f59e0b", [245, 158, 11, 245], ("heatwave", "heat wave", "extreme heat")),
                 ("Cold / snow", "#38bdf8", [56, 189, 248, 245], ("cold wave", "coldwave", "snowfall", "heavy snow", "blizzard")),
                 ("Wildfire", "#f97316", [249, 115, 22, 245], ("wildfire", "forest fire")),
@@ -390,11 +390,9 @@ def render_live_disaster_intelligence() -> None:
             ]
 
             def marker_color(event):
-                event_text = " ".join(
-                    str(event.get(field) or "") for field in ("Hazard", "Event")
-                ).casefold()
-                for _, _, rgba, terms in hazard_palette[:-1]:
-                    if any(term in event_text for term in terms):
+                hazard = str(event.get("Hazard") or "Other")
+                for label, _, rgba, _ in hazard_palette:
+                    if hazard == label:
                         return rgba
                 return hazard_palette[-1][2]
 
