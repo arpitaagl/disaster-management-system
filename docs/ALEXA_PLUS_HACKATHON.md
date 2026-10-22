@@ -28,7 +28,15 @@ Open **ResQ Assistant** in the Streamlit multipage navigation. Without an LLM ke
 python -m resq_mcp.server
 ```
 
-By default, the Streamable HTTP endpoint is `http://127.0.0.1:8000/mcp`. Configure `MCP_HOST` and `MCP_PORT` if needed. Connect an MCP client/Inspector to this endpoint for local testing. You can also use the included real MCP client demo in a second terminal:\n\n```bash\npython -m resq_mcp.demo_client\npython -m resq_mcp.demo_client --tool explain_priority --incident-id INC-001\npython -m resq_mcp.demo_client --tool find_shelters --minimum-spaces 10\n```\n\nThe demo client performs MCP initialization, lists the server's registered tools, and calls a selected tool over Streamable HTTP. A remote Alexa+ integration requires a publicly reachable HTTPS endpoint and Alexa+'s authentication/account-linking requirements; the local development server is intentionally not exposed publicly and does not implement OAuth. The Alexa+ partner-only CLI/toolkit is not required to submit a self-hosted MCP server, but direct Alexa+ account linking is not claimed by this prototype. Do not expose an unauthenticated local endpoint to the internet.
+By default, the Streamable HTTP endpoint is `http://127.0.0.1:8000/mcp`. Configure `MCP_HOST` and `MCP_PORT` if needed. Connect an MCP client/Inspector to this endpoint for local testing. You can also use the included real MCP client demo in a second terminal:
+
+```bash
+python -m resq_mcp.demo_client
+python -m resq_mcp.demo_client --tool explain_priority --incident-id INC-001
+python -m resq_mcp.demo_client --tool find_shelters --minimum-spaces 10
+```
+
+The demo client performs MCP initialization, lists the server's registered tools, and calls a selected tool over Streamable HTTP. A remote Alexa+ integration requires a publicly reachable HTTPS endpoint and Alexa+'s authentication/account-linking requirements; the local development server is intentionally not exposed publicly and does not implement OAuth. The Alexa+ partner-only CLI/toolkit is not required to submit a self-hosted MCP server, but direct Alexa+ account linking is not claimed by this prototype. Do not expose an unauthenticated local endpoint to the internet.
 
 ## AWS Builder mini-challenge: optional Amazon Bedrock integration
 
