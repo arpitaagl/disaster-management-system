@@ -172,7 +172,6 @@ if submitted:
                 accessibility=accessibility,
                 reporter=reporter,
                 image_name=image_name,
-                location_text=selected_address,
             )
             analysis = result["analysis"]
             incident = result["incident"]
