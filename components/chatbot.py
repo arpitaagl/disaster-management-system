@@ -454,6 +454,18 @@ def _fallback(question: str, center: CommandCenter) -> str:
 
 
 def answer_question(question: str, center: CommandCenter, history: list[dict[str, str]] | None = None) -> str:
+    # Explicit requests to call or dispatch emergency help must outrank all data
+    # lookups. This keeps "Can you send an ambulance?" from falling through to
+    # the operational resource-count response, regardless of LLM configuration.
+    if _has_phrase(question, (
+        "send an ambulance", "call an ambulance", "need an ambulance",
+        "dispatch an ambulance", "request an ambulance", "get an ambulance",
+        "send paramedics", "send medical help", "someone needs an ambulance",
+    )):
+        return _safety_guidance("send an ambulance") or (
+            "Contact local emergency services now. ResQ Assistant cannot call responders or dispatch resources."
+        )
+
     count_answer = _incident_count_answer(question, center)
     if count_answer:
         return count_answer
