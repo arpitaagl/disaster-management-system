@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import streamlit as st
 
-from components.leaflet_location_picker import leaflet_location_picker
 from components.session import get_center, persist
 from components.theme import page_setup, render_header, render_sidebar
 from core.config import CITY_LAT, CITY_LON
@@ -20,26 +19,11 @@ st.info(
     "It does not choose the final rescue unit. Priority scoring and assignment are deterministic."
 )
 
-st.markdown("### Select incident location")
-st.caption("Search for an address or landmark, click the map, or drag the pin to the exact incident location.")
-selected_location = leaflet_location_picker(
-    default_lat=CITY_LAT,
-    default_lon=CITY_LON,
-    key="report_incident_leaflet_map",
-)
-
-if isinstance(selected_location, dict) and selected_location.get("lat") is not None and selected_location.get("lon") is not None:
-    lat = float(selected_location["lat"])
-    lon = float(selected_location["lon"])
-    selected_address = str(selected_location.get("address") or "Map location selected")
-    st.success(f"Selected location: {selected_address}")
-    st.caption(f"Coordinates: {lat:.6f}, {lon:.6f}")
-else:
-    # Keep incident reporting usable if the custom map component fails to load.
-    lat = float(CITY_LAT)
-    lon = float(CITY_LON)
-    selected_address = ""
-    st.warning("Map unavailable? Enter the address/landmark and coordinates below to continue.")
+# The map component is temporarily omitted from the reporting form.
+# Users can enter the incident landmark and coordinates directly below.
+lat = float(CITY_LAT)
+lon = float(CITY_LON)
+selected_address = ""
 
 with st.form("report_form"):
     description = st.text_area("Incident description", placeholder="Describe what happened, hazards, and people affected", height=140)
