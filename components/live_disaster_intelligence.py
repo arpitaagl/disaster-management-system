@@ -309,10 +309,6 @@ def render_live_disaster_intelligence() -> None:
                 | mapped["Source"].isin({"India Meteorological Department — public CAP", "NDMA SACHET / CAP"})
             )
             mapped = mapped[india_label].reset_index(drop=True)
-            mapped["tooltip_location"] = mapped["Area"].fillna("Location not provided").astype(str)
-            mapped["tooltip_alert"] = mapped["Alert / magnitude"].fillna("Not reported").astype(str)
-            mapped["tooltip_time"] = mapped["Event time (UTC)"].fillna("Not provided").astype(str)
-            mapped["tooltip_source"] = mapped["Source"].fillna("Source not provided").astype(str)
             # Keep the marker palette consistent between the map and its legend.
             hazard_palette = [
                 ("Flood", "#ef4444", [239, 68, 68, 245], ("flood", "inundat")),
@@ -388,10 +384,6 @@ def render_live_disaster_intelligence() -> None:
                 layers=[india_glow_layer, india_layer],
                 initial_view_state=india_view,
                 map_style="https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
-                tooltip={
-                    "text": "{Event}\nHazard: {Hazard}\nLocation: {tooltip_location}"
-                    "\nAlert: {tooltip_alert}\nTime (UTC): {tooltip_time}\nSource: {tooltip_source}"
-                },
             )
             map_selection = st.pydeck_chart(
                 india_deck,
@@ -407,19 +399,16 @@ def render_live_disaster_intelligence() -> None:
                 # Ignore an old selection if the user changes map filters.
                 if selected_incident.get("Event") in set(mapped["Event"].astype(str)):
                     with st.container(border=True):
-                        st.markdown("#### Selected incident")
-                        detail_left, detail_right = st.columns(2)
-                        with detail_left:
-                            st.write("**Incident:**", selected_incident.get("Event", "Not provided"))
-                            st.write("**Hazard:**", selected_incident.get("Hazard", "Not provided"))
-                            st.write("**Area:**", selected_incident.get("Area", "Not provided"))
-                        with detail_right:
-                            st.write("**Alert / magnitude:**", selected_incident.get("Alert / magnitude", "Not reported"))
-                            st.write("**Event time (UTC):**", selected_incident.get("Event time (UTC)", "Not provided"))
-                            st.write("**Source:**", selected_incident.get("Source", "Not provided"))
-                        record_url = str(selected_incident.get("Record") or "")
-                        if record_url.startswith(("https://", "http://")):
-                            st.link_button("Open source record", record_url)
+                        st.markdown("#### Incident location")
+                        st.write("**Incident:**", selected_incident.get("Event", "Not provided"))
+                        lat = float(selected_incident.get("Latitude"))
+                        lon = float(selected_incident.get("Longitude"))
+                        approximate = selected_incident.get("Source") in {
+                            "India Meteorological Department — public CAP", "NDMA SACHET / CAP"
+                        }
+                        location_text = str(selected_incident.get("Area") or "India")
+                        precision_note = " · approximate state-center location" if approximate else ""
+                        st.write("**Location:**", f"{location_text} ({lat:.3f}, {lon:.3f}){precision_note}")
             st.caption(
                 f"{len(mapped)} filtered source events explicitly labeled India and inside India's approximate bounds. "
                 "India government alerts without coordinates use an approximate state-center marker. Only India-located records are shown in the event stream."
