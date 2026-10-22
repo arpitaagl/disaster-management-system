@@ -58,11 +58,11 @@ def _distance_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     return radius * 2 * math.atan2(math.sqrt(value), math.sqrt(max(0.0, 1.0 - value)))
 
 
-@st.cache_data(ttl=600, show_spinner=False)
+@st.cache_data(ttl=300, show_spinner=False)
 def _nearby_public_services(lat: float, lon: float, radius_m: int = 25000) -> list[dict]:
-    """Find public-map-listed facilities through multiple Overpass mirrors."""
+    """Fast, bounded lookup; cache both results and temporary directory outages."""
     query = f"""
-    [out:json][timeout:12];
+    [out:json][timeout:8];
     (
       nwr(around:{radius_m},{lat},{lon})[amenity~"^(hospital|clinic|doctors|police|fire_station)$"];
       nwr(around:{radius_m},{lat},{lon})[emergency~"^(ambulance_station|fire_station|ambulance_centre|rescue_station)$"];
@@ -70,96 +70,23 @@ def _nearby_public_services(lat: float, lon: float, radius_m: int = 25000) -> li
     out center tags;
     """
     headers = {"User-Agent": "ResQ-AI public emergency service directory/1.0 (disaster response prototype)"}
-    endpoints = (
-        "https://overpass-api.de/api/interpreter",
-        "https://overpass.kumi.systems/api/interpreter",
-        "https://overpass.private.coffee/api/interpreter",
-    )
-    payload = None
-    last_error = None
-    # Public Overpass mirrors can be rate-limited. Try POST and GET on each mirror
-    # with bounded timeouts before reporting an outage.
-    for endpoint in endpoints:
-        for method in ("post", "get"):
-            try:
-                if method == "post":
-                    response = requests.post(
-                        endpoint, data={"data": query}, headers=headers, timeout=(3, 8)
-                    )
-                else:
-                    response = requests.get(
-                        endpoint, params={"data": query}, headers=headers, timeout=(3, 8)
-                    )
-                response.raise_for_status()
-                candidate = response.json()
-                if isinstance(candidate, dict) and isinstance(candidate.get("elements"), list):
-                    payload = candidate
-                    break
-            except (requests.RequestException, ValueError) as exc:
-                last_error = exc
-        if payload is not None:
-            break
-    labels = {
-        "hospital": "Hospital", "clinic": "Clinic", "doctors": "Medical clinic",
-        "police": "Police station", "fire_station": "Fire station",
-        "ambulance_station": "Ambulance station", "ambulance_centre": "Ambulance centre",
-        "rescue_station": "Rescue station", "ambulance": "Ambulance service",
-    }
-
-    # Fallback: query Nominatim's public map search within a bounded box if all
-    # Overpass mirrors are unavailable. These are directory leads, not live teams.
-    fallback_rows = []
-    if payload is None:
-        headers["Accept-Language"] = "en"
-        lat_delta = radius_m / 1000 / 110.574
-        cos_lat = max(0.2, abs(math.cos(math.radians(lat))))
-        lon_delta = radius_m / 1000 / (111.320 * cos_lat)
-        viewbox = f"{lon - lon_delta},{lat + lat_delta},{lon + lon_delta},{lat - lat_delta}"
-        for term, service_type in (
-            ("hospital", "Hospital"),
-            ("clinic", "Medical clinic"),
-            ("police station", "Police station"),
-            ("fire station", "Fire station"),
-            ("ambulance station", "Ambulance station"),
-            ("rescue station", "Rescue station"),
-        ):
-            try:
-                response = requests.get(
-                    "https://nominatim.openstreetmap.org/search",
-                    params={
-                        "q": term, "format": "jsonv2", "limit": 10,
-                        "viewbox": viewbox, "bounded": 1,
-                        "addressdetails": 0,
-                    },
-                    headers=headers,
-                    timeout=(3, 8),
-                )
-                response.raise_for_status()
-                entries = response.json()
-                if not isinstance(entries, list):
-                    continue
-                for entry in entries:
-                    name = str(entry.get("name") or "").strip()
-                    if not name:
-                        continue
-                    item_lat, item_lon = float(entry["lat"]), float(entry["lon"])
-                    fallback_rows.append({
-                        "name": name,
-                        "type": service_type,
-                        "distance_km": _distance_km(lat, lon, item_lat, item_lon),
-                        "phone": "",
-                        "source": "OpenStreetMap Nominatim public directory",
-                    })
-            except (requests.RequestException, ValueError, TypeError, KeyError):
-                continue
-        if not fallback_rows:
-            raise requests.RequestException("Overpass and Nominatim public directories are unavailable") from last_error
-        unique = {}
-        for row in fallback_rows:
-            key = (row["name"].casefold(), row["type"])
-            if key not in unique or row["distance_km"] < unique[key]["distance_km"]:
-                unique[key] = row
-        return sorted(unique.values(), key=lambda row: row["distance_km"])[:30]
+    # One bounded request only. Public directory outages must not block the page
+    # with a chain of mirror retries and multiple Nominatim queries.
+    try:
+        response = requests.post(
+            "https://overpass-api.de/api/interpreter",
+            data={"data": query},
+            headers=headers,
+            timeout=(2, 6),
+        )
+        response.raise_for_status()
+        payload = response.json()
+        if not isinstance(payload, dict) or not isinstance(payload.get("elements"), list):
+            return []
+    except (requests.RequestException, ValueError, TypeError):
+        # Returning an empty list lets Streamlit cache the outage for 5 minutes,
+        # avoiding a new slow request on every rerun. No services are fabricated.
+        return []
 
     labels = {
         "hospital": "Hospital", "clinic": "Clinic", "doctors": "Medical clinic",
@@ -180,13 +107,14 @@ def _nearby_public_services(lat: float, lon: float, radius_m: int = 25000) -> li
         kind = str(tags.get("amenity") or tags.get("emergency") or "emergency service")
         phone = str(tags.get("contact:phone") or tags.get("phone") or tags.get("contact:mobile") or "").strip()
         distance = _distance_km(lat, lon, float(coords["lat"]), float(coords["lon"]))
-        key = (name.casefold(), labels.get(kind, kind.replace("_", " ").title()))
+        service_type = labels.get(kind, kind.replace("_", " ").title())
+        key = (name.casefold(), service_type)
         if key in seen:
             continue
         seen.add(key)
         results.append({
             "name": name,
-            "type": labels.get(kind, kind.replace("_", " ").title()),
+            "type": service_type,
             "distance_km": distance,
             "phone": phone,
             "source": "OpenStreetMap public directory",
