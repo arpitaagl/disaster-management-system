@@ -226,13 +226,9 @@ selected_id = st.selectbox(
     format_func=lambda value: incident_labels[value],
 )
 incident = next((item for item in active_incidents if str(item.get("id")) == selected_id), {})
+# The selected report is the single source of truth for the search location.
+# Do not ask the reporter/coordinator to enter the address a second time.
 saved_location_text = str(incident.get("location_text") or "").strip()
-location_override = st.text_input(
-    "Incident location for nearby-service search",
-    value=saved_location_text,
-    placeholder="e.g., Sector 80, Noida",
-    help="ResQ-AI searches this address first. For older reports, enter the location here because earlier versions did not save the typed address.",
-)
 
 assignment = center.assignment_for(selected_id)
 
@@ -245,23 +241,14 @@ try:
 except (TypeError, ValueError):
     people_label = str(people or "Not provided")
 lat, lon = incident.get("lat"), incident.get("lon")
-saved_location_text = str(incident.get("location_text") or "").strip()
-location_text = location_override.strip() or saved_location_text
+# Use the coordinates captured when the incident was reported. The saved address
+# is displayed for context; no second location entry or geocoding step is needed.
+location_text = saved_location_text
 location = location_text or (
     f"{lat}, {lon}"
     if lat is not None and lon is not None
     else "Location not available"
 )
-# Prefer the address entered here or saved by the reporter. Never silently use stale
-# coordinates if an explicitly entered address cannot be resolved.
-if location_text:
-    lat, lon = None, None
-    with st.spinner("Resolving the reported address for nearby-service search…"):
-        resolved = _geocode_incident_location(location_text)
-    if resolved:
-        lat, lon = resolved
-    else:
-        st.warning("Could not locate this address automatically. Check the spelling or enter a more specific address (area, city) before searching nearby services.")
 
 a, b, c, d = st.columns(4)
 score = incident.get("priority_score")
