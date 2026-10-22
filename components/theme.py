@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import streamlit as st
 from html import escape
+import base64
+from pathlib import Path
 
 from core.config import DISCLAIMER
 from core.llm_client import llm_configured
@@ -1559,7 +1561,13 @@ REFERENCE_CSS = """
 [data-testid="stMain"],
 [data-testid="stMainBlockContainer"] {
   color: var(--resq-ink) !important;
-  background: linear-gradient(135deg, #f3f8fc 0%, #eef6fb 56%, #eaf4f9 100%) !important;
+  background: transparent !important;
+}
+.stApp {
+  min-height: 100vh;
+  background-size: cover !important;
+  background-position: center center !important;
+  background-attachment: fixed !important;
 }
 header[data-testid="stHeader"] { background: rgba(255,255,255,.92) !important; }
 [data-testid="stMainBlockContainer"] { padding-top: 0 !important; }
@@ -1810,6 +1818,13 @@ def inject_theme() -> None:
     st.markdown(ENHANCED_CSS, unsafe_allow_html=True)
     st.markdown(POLISH_CSS, unsafe_allow_html=True)
     st.markdown(REFERENCE_CSS, unsafe_allow_html=True)
+    background_path = Path(__file__).resolve().parents[1] / "assets" / "command-center-background.webp"
+    background_data = base64.b64encode(background_path.read_bytes()).decode("ascii")
+    st.markdown(
+        "<style>.stApp{background-image:linear-gradient(rgba(246,251,255,.36),rgba(240,249,254,.42)),"
+        f"url(data:image/webp;base64,{background_data}) !important;}}</style>",
+        unsafe_allow_html=True,
+    )
 
 
 def page_setup(title: str) -> None:
