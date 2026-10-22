@@ -202,7 +202,7 @@ def _app_help(question: str) -> str | None:
     tokens = _intent_tokens(q)
 
     # Explain the product's purpose explicitly, including common voice phrasing.
-    if _has_phrase(q, (
+    if any(phrase in q for phrase in (
         "what is the purpose of this application",
         "what is the purpose of this app",
         "what is this application for",
