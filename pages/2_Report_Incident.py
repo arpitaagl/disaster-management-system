@@ -35,16 +35,33 @@ if isinstance(selected_location, dict) and selected_location.get("lat") is not N
     st.success(f"Selected location: {selected_address}")
     st.caption(f"Coordinates: {lat:.6f}, {lon:.6f}")
 else:
-    lat = 0.0
-    lon = 0.0
+    # Keep incident reporting usable if the custom map component fails to load.
+    lat = float(CITY_LAT)
+    lon = float(CITY_LON)
     selected_address = ""
+    st.warning("Map unavailable? Enter the address/landmark and coordinates below to continue.")
 
 with st.form("report_form"):
     description = st.text_area("Incident description", placeholder="Describe what happened, hazards, and people affected", height=140)
     if selected_address:
         st.text_input("Selected incident location", value=selected_address, disabled=True)
+        manual_address = selected_address
+        manual_lat = lat
+        manual_lon = lon
     else:
-        st.info("Select the incident location on the map above before submitting the report.")
+        manual_address = st.text_input(
+            "Incident address or landmark",
+            placeholder="e.g., Sector 18 Metro Station, Noida",
+            help="Enter the nearest address or landmark. Coordinates below are required for mapping."
+        )
+        coord_cols = st.columns(2)
+        manual_lat = coord_cols[0].number_input(
+            "Latitude", min_value=-90.0, max_value=90.0, value=float(CITY_LAT), format="%.6f"
+        )
+        manual_lon = coord_cols[1].number_input(
+            "Longitude", min_value=-180.0, max_value=180.0, value=float(CITY_LON), format="%.6f"
+        )
+        st.caption("Coordinates default to the configured city centre. Change them to the incident's actual coordinates for accurate location-based recommendations.")
     people = st.number_input("Estimated people affected", min_value=0, value=0, step=1)
     accessibility = st.selectbox("Observed accessibility", ["Open", "Restricted", "Blocked"], index=0)
     reporter = st.text_input("Reporter (optional)", placeholder="Name or call sign")
@@ -52,8 +69,13 @@ with st.form("report_form"):
     submitted = st.form_submit_button("ANALYZE INCIDENT", use_container_width=True)
 
 if submitted:
-    if not selected_address or not isinstance(selected_location, dict):
-        errors = ["Select a precise incident location on the map before submitting."]
+    # Use the map selection when available; otherwise accept the manual fallback.
+    if not selected_address:
+        selected_address = manual_address.strip()
+        lat = float(manual_lat)
+        lon = float(manual_lon)
+    if not selected_address:
+        errors = ["Enter an incident address or nearby landmark."]
     else:
         errors = validate_report(description, people, lat, lon)
     if errors:
