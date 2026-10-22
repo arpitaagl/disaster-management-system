@@ -510,14 +510,22 @@ def render_live_disaster_intelligence() -> None:
                 # Ignore an old selection if the user changes map filters.
                 if selected_incident.get("Event") in set(mapped["Event"].astype(str)):
                     with st.container(border=True):
-                        st.markdown("#### Incident location")
+                        st.markdown("#### Selected incident details")
                         st.write("**Incident:**", selected_incident.get("Event", "Not provided"))
+                        st.write("**Hazard:**", selected_incident.get("Hazard", "Other"))
                         lat = float(selected_incident.get("Latitude"))
                         lon = float(selected_incident.get("Longitude"))
                         approximate = bool(selected_incident.get("Location approximate", False))
                         location_text = str(selected_incident.get("Area") or "India")
                         precision_note = " · approximate marker; feed did not provide precise coordinates" if approximate else ""
                         st.write("**Location:**", f"{location_text} ({lat:.3f}, {lon:.3f}){precision_note}")
+                        description = str(selected_incident.get("Alert / magnitude") or "No short description provided")
+                        st.write("**Description:**", description)
+                        st.write("**Time (UTC):**", selected_incident.get("Event time (UTC)", "Time not provided"))
+                        st.write("**Source:**", selected_incident.get("Source", "Source not provided"))
+                        record_url = str(selected_incident.get("Record") or "")
+                        if record_url.startswith(("https://", "http://")):
+                            st.link_button("Open source record", record_url)
             st.caption(
                 f"Map shows {len(mapped)} of {len(filtered)} incidents in the current event stream. "
                 "Government alerts without coordinates use an approximate state or India-level marker, labeled as approximate when selected. Only India-located records are shown in the event stream."
