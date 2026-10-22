@@ -214,11 +214,11 @@ def _app_help(question: str) -> str | None:
         "purpose of resq",
     )):
         return (
-            "**Purpose of ResQ-AI**\\n\\n"
+            "**Purpose of ResQ-AI**\n\n"
             "ResQ-AI is a disaster-response decision-support prototype designed to help teams organize incident reports, "
             "review incident priority, inspect available resource and shelter records, view supported public alerts, "
             "explore simulated scenarios, and prepare situation summaries. Its goal is to make response information easier "
-            "to understand and coordinate—not to replace emergency services or human decision-makers.\\n\\n"
+            "to understand and coordinate—not to replace emergency services or human decision-makers.\n\n"
             "**Important limits:** some operational records or scenario results may be simulated or incomplete. "
             "Live alerts depend on connected sources. Priority scores are decision support only; the app does not automatically "
             "call emergency services or dispatch responders."
