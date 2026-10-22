@@ -147,6 +147,18 @@ def _is_emergency_dispatch_request(question: str) -> bool:
     return action and target
 
 
+def _is_operational_records_question(question: str) -> bool:
+    """Identify questions whose factual answer must come from the loaded operational records."""
+    return _contains_fuzzy_phrase(question, (
+        "incident", "incidents", "incident id", "incident status",
+        "resource", "resources", "ambulance", "ambulances", "rescue team",
+        "hospital bed", "hospital beds", "medical capacity",
+        "shelter", "shelters", "shelter capacity", "available unit",
+        "highest priority", "most urgent", "priority score",
+        "dashboard summary", "response snapshot", "situation summary",
+    ))
+
+
 def _incident_count_answer(question: str, center: CommandCenter) -> str | None:
     """Count matching incident records from the loaded snapshot for explicit count questions."""
     count_intent = _contains_fuzzy_phrase(
@@ -501,6 +513,11 @@ def answer_question(question: str, center: CommandCenter, history: list[dict[str
     greeting = _greeting_response(question)
     if greeting:
         return greeting
+
+    # Operational record questions must use deterministic answers from the loaded
+    # snapshot, not free-form LLM text that could invent counts or availability.
+    if _is_operational_records_question(question):
+        return _fallback(question, center)
 
     if not llm_configured():
         return _fallback(question, center)
