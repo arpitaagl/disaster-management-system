@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from collections import Counter
+from html import escape
 import re
 
 import pandas as pd
@@ -388,14 +389,14 @@ def render_live_disaster_intelligence() -> None:
                 | mapped["Source"].isin({"India Meteorological Department — public CAP", "NDMA SACHET / CAP"})
             )
             mapped = mapped[india_label].reset_index(drop=True)
+            mapped["tooltip_event"] = mapped["Event"].fillna("Incident").astype(str).map(escape)
+            mapped["tooltip_hazard"] = mapped["Hazard"].fillna("Other").astype(str).map(escape)
             mapped["tooltip_description"] = (
                 mapped["Alert / magnitude"].fillna("No short description provided")
-                .astype(str).str.replace(r"\s+", " ", regex=True).str.slice(0, 180)
+                .astype(str).str.replace(r"\s+", " ", regex=True).str.slice(0, 180).map(escape)
             )
-            mapped["tooltip_location"] = mapped["Area"].fillna("Location not provided").astype(str)
+            mapped["tooltip_location"] = mapped["Area"].fillna("Location not provided").astype(str).map(escape)
             mapped.loc[mapped["Location approximate"], "tooltip_location"] += " (approximate marker)"
-            mapped["tooltip_time"] = mapped["Event time (UTC)"].fillna("Time not provided").astype(str)
-            mapped["tooltip_source"] = mapped["Source"].fillna("Source not provided").astype(str)
             # Keep the marker palette consistent between the map and its legend.
             hazard_palette = [
                 ("Flood", "#ef4444", [239, 68, 68, 245], ("flood", "inundat")),
@@ -480,8 +481,19 @@ def render_live_disaster_intelligence() -> None:
                 initial_view_state=india_view,
                 map_style="https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
                 tooltip={
-                    "text": "{Event}\nHazard: {Hazard}\nLocation: {tooltip_location}"
-                    "\nDescription: {tooltip_description}\nTime (UTC): {tooltip_time}\nSource: {tooltip_source}"
+                    "html": "<div style='max-width:280px;line-height:1.45'>"
+                    "<strong>{tooltip_event}</strong><br/>"
+                    "<b>Hazard:</b> {tooltip_hazard}<br/>"
+                    "<b>Location:</b> {tooltip_location}<br/>"
+                    "{tooltip_description}</div>",
+                    "style": {
+                        "backgroundColor": "#10253d",
+                        "color": "#f5fbff",
+                        "border": "1px solid #41cde0",
+                        "borderRadius": "10px",
+                        "padding": "10px 12px",
+                        "fontSize": "12px",
+                    },
                 },
             )
             map_selection = st.pydeck_chart(
