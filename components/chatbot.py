@@ -125,6 +125,28 @@ def _contains_fuzzy_phrase(question: str, phrases: tuple[str, ...]) -> bool:
     return False
 
 
+def _is_emergency_dispatch_request(question: str) -> bool:
+    """Recognize requests to obtain emergency medical help without matching availability queries."""
+    if _has_phrase(question, (
+        "send an ambulance", "call an ambulance", "need an ambulance",
+        "dispatch an ambulance", "request an ambulance", "get an ambulance",
+        "send paramedics", "send medical help", "someone needs an ambulance",
+    )):
+        return True
+
+    # Broader natural phrasing: "get medical help here" or "arrange paramedics".
+    # Availability questions do not contain an action asking for help.
+    action = _contains_fuzzy_phrase(question, (
+        "send", "call", "dispatch", "request", "get", "arrange", "bring",
+        "need", "summon",
+    ))
+    target = _contains_fuzzy_phrase(question, (
+        "ambulance", "paramedics", "medical help", "emergency medical help",
+        "emergency help",
+    ))
+    return action and target
+
+
 def _incident_count_answer(question: str, center: CommandCenter) -> str | None:
     """Count matching incident records from the loaded snapshot for explicit count questions."""
     count_intent = _contains_fuzzy_phrase(
@@ -454,14 +476,8 @@ def _fallback(question: str, center: CommandCenter) -> str:
 
 
 def answer_question(question: str, center: CommandCenter, history: list[dict[str, str]] | None = None) -> str:
-    # Explicit requests to call or dispatch emergency help must outrank all data
-    # lookups. This keeps "Can you send an ambulance?" from falling through to
-    # the operational resource-count response, regardless of LLM configuration.
-    if _has_phrase(question, (
-        "send an ambulance", "call an ambulance", "need an ambulance",
-        "dispatch an ambulance", "request an ambulance", "get an ambulance",
-        "send paramedics", "send medical help", "someone needs an ambulance",
-    )):
+    # Emergency dispatch requests outrank all data lookups, regardless of LLM configuration.
+    if _is_emergency_dispatch_request(question):
         return _safety_guidance("send an ambulance") or (
             "Contact local emergency services now. ResQ Assistant cannot call responders or dispatch resources."
         )
