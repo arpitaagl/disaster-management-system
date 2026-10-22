@@ -59,6 +59,68 @@ def _distance_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 
 
 @st.cache_data(ttl=600, show_spinner=False)
+@st.cache_data(ttl=600, show_spinner=False)
+def _nearby_nominatim_fallback(lat: float, lon: float, radius_m: int = 25000) -> list[dict]:
+    """Fallback search through Nominatim when Overpass mirrors are unavailable."""
+    headers = {"User-Agent": "ResQ-AI public emergency service directory/1.0 (disaster response prototype)"}
+    # Approximate a local bounding box; final ranking uses straight-line distance.
+    lat_delta = radius_m / 111_000
+    lon_delta = radius_m / max(20_000, 111_000 * math.cos(math.radians(lat)))
+    west, south, east, north = lon - lon_delta, lat - lat_delta, lon + lon_delta, lat + lat_delta
+    queries = (
+        ("hospital", "Hospital"),
+        ("clinic", "Clinic"),
+        ("fire station", "Fire station"),
+        ("police station", "Police station"),
+        ("ambulance station", "Ambulance station"),
+    )
+    found = {}
+    for query_text, label in queries:
+        try:
+            response = requests.get(
+                "https://nominatim.openstreetmap.org/search",
+                params={
+                    "q": query_text,
+                    "format": "jsonv2",
+                    "limit": 10,
+                    "viewbox": f"{west},{north},{east},{south}",
+                    "bounded": 1,
+                    "addressdetails": 0,
+                    "extratags": 1,
+                },
+                headers=headers,
+                timeout=(3, 7),
+            )
+            response.raise_for_status()
+            rows = response.json()
+            if not isinstance(rows, list):
+                continue
+            for row in rows:
+                try:
+                    slat, slon = float(row["lat"]), float(row["lon"])
+                except (KeyError, TypeError, ValueError):
+                    continue
+                name = str(row.get("name") or row.get("display_name") or "").split(",")[0].strip()
+                if not name:
+                    continue
+                distance = _distance_km(lat, lon, slat, slon)
+                if distance * 1000 > radius_m:
+                    continue
+                extra = row.get("extratags") or {}
+                phone = str(extra.get("phone") or extra.get("contact:phone") or "").strip()
+                key = (name.casefold(), label)
+                found[key] = {
+                    "name": name,
+                    "type": label,
+                    "distance_km": distance,
+                    "phone": phone,
+                    "source": "OpenStreetMap Nominatim fallback",
+                }
+        except (requests.RequestException, ValueError):
+            continue
+    return sorted(found.values(), key=lambda row: row["distance_km"])[:30]
+
+
 def _nearby_public_services(lat: float, lon: float, radius_m: int = 25000) -> list[dict]:
     """Find public-map-listed facilities through multiple Overpass mirrors."""
     query = f"""
@@ -100,7 +162,10 @@ def _nearby_public_services(lat: float, lon: float, radius_m: int = 25000) -> li
         if payload is not None:
             break
     if payload is None:
-        raise requests.RequestException("All public map directory endpoints failed") from last_error
+        fallback = _nearby_nominatim_fallback(lat, lon, radius_m)
+        if fallback:
+            return fallback
+        raise requests.RequestException("Overpass mirrors and Nominatim fallback returned no usable results") from last_error
 
     labels = {
         "hospital": "Hospital", "clinic": "Clinic", "doctors": "Medical clinic",
