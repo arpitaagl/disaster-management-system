@@ -7,6 +7,8 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
+from resq_mcp.auth import auth_configuration
+
 from core.state import load_demo_disaster
 from core.live_data import get_imd_live_data, get_ndma_cap_alerts
 from resq_mcp.logic import (
@@ -17,6 +19,8 @@ from resq_mcp.logic import (
     get_resource_status as _get_resource_status,
     list_incidents as _list_incidents,
 )
+
+_auth_config = auth_configuration()
 
 mcp = FastMCP(
     "ResQ-AI Disaster Response",
@@ -29,6 +33,8 @@ mcp = FastMCP(
     port=int(os.getenv("MCP_PORT", "8000")),
     stateless_http=True,
     json_response=True,
+    token_verifier=_auth_config[0] if _auth_config else None,
+    auth=_auth_config[1] if _auth_config else None,
 )
 
 
