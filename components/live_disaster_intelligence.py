@@ -39,6 +39,33 @@ def _is_india_incident(event: dict) -> bool:
     return 5.0 <= latitude <= 38.0 and 67.0 <= longitude <= 98.0
 
 
+_INDIA_STATE_CENTROIDS = {
+    "andhra pradesh": (16.5, 80.6), "arunachal pradesh": (28.2, 94.7),
+    "assam": (26.2, 92.9), "bihar": (25.9, 85.1), "chhattisgarh": (21.3, 81.8),
+    "goa": (15.5, 73.9), "gujarat": (22.3, 71.2), "haryana": (29.0, 76.1),
+    "himachal pradesh": (31.1, 77.2), "jharkhand": (23.6, 85.3), "karnataka": (15.3, 75.7),
+    "kerala": (10.5, 76.3), "madhya pradesh": (23.5, 78.5), "maharashtra": (19.6, 75.3),
+    "manipur": (24.7, 93.9), "meghalaya": (25.5, 91.3), "mizoram": (23.2, 92.7),
+    "nagaland": (26.1, 94.6), "odisha": (20.5, 84.4), "orissa": (20.5, 84.4),
+    "punjab": (31.1, 75.3), "rajasthan": (26.8, 73.8), "sikkim": (27.5, 88.5),
+    "tamil nadu": (11.1, 78.7), "telangana": (18.1, 79.0), "tripura": (23.8, 91.3),
+    "uttar pradesh": (26.8, 80.9), "uttarakhand": (30.1, 79.0), "west bengal": (22.9, 87.9),
+    "andaman and nicobar": (11.7, 92.7), "chandigarh": (30.7, 76.8),
+    "dadra and nagar haveli": (20.2, 73.0), "daman and diu": (20.4, 72.8),
+    "delhi": (28.6, 77.2), "jammu and kashmir": (33.7, 76.0), "jammu & kashmir": (33.7, 76.0),
+    "ladakh": (34.2, 77.6), "lakshadweep": (10.6, 72.6), "puducherry": (11.9, 79.8),
+}
+
+
+def _approximate_india_coordinates(area: str) -> tuple[float, float] | None:
+    """Return a state-level centroid for India alerts whose feed lacks coordinates."""
+    location = str(area or "").casefold()
+    for state in sorted(_INDIA_STATE_CENTROIDS, key=len, reverse=True):
+        if re.search(rf"\b{re.escape(state)}\b", location):
+            return _INDIA_STATE_CENTROIDS[state]
+    return None
+
+
 @st.fragment(run_every=300)
 def render_live_disaster_intelligence() -> None:
     st.markdown('<div class="resq-kicker">RESQ-AI / GLOBAL MONITORING</div>', unsafe_allow_html=True)
@@ -128,8 +155,8 @@ def render_live_disaster_intelligence() -> None:
                 "Event time (UTC)": row.get("published") or "Not provided",
                 "Source": "India Meteorological Department — public CAP",
                 "Record": row.get("link") or public_result.get("source_url") or IMD_PUBLIC_CAP_URL,
-                "Latitude": None,
-                "Longitude": None,
+                "Latitude": (_approximate_india_coordinates(area) or (None, None))[0],
+                "Longitude": (_approximate_india_coordinates(area) or (None, None))[1],
             })
     except (requests.RequestException, ValueError, TypeError):
         source_rows.append({
@@ -164,8 +191,8 @@ def render_live_disaster_intelligence() -> None:
                 "Event time (UTC)": row.get("published") or "Not provided",
                 "Source": "NDMA SACHET / CAP",
                 "Record": row.get("link") or ndma.get("source_url") or "https://sachet.ndma.gov.in/",
-                "Latitude": None,
-                "Longitude": None,
+                "Latitude": (_approximate_india_coordinates(area) or (None, None))[0],
+                "Longitude": (_approximate_india_coordinates(area) or (None, None))[1],
             })
     except (requests.RequestException, ValueError, TypeError):
         source_rows.append({
@@ -279,6 +306,7 @@ def render_live_disaster_intelligence() -> None:
             india_label = (
                 mapped["Area"].fillna("").astype(str).str.contains(r"\bindia\b", case=False, regex=True)
                 | mapped["Event"].fillna("").astype(str).str.contains(r"\bindia\b", case=False, regex=True)
+                | mapped["Source"].isin({"India Meteorological Department — public CAP", "NDMA SACHET / CAP"})
             )
             mapped = mapped[india_label].reset_index(drop=True)
             # Keep the marker palette consistent between the map and its legend.
@@ -344,9 +372,9 @@ def render_live_disaster_intelligence() -> None:
                 get_position="[Longitude, Latitude]",
                 get_fill_color="[marker_r, marker_g, marker_b, 245]",
                 get_line_color=[255, 255, 255, 255],
-                get_radius=28000,
-                radius_min_pixels=4,
-                radius_max_pixels=10,
+                get_radius=42000,
+                radius_min_pixels=7,
+                radius_max_pixels=15,
                 line_width_min_pixels=2,
                 pickable=True,
                 auto_highlight=True,
@@ -387,7 +415,7 @@ def render_live_disaster_intelligence() -> None:
                             st.link_button("Open source record", record_url)
             st.caption(
                 f"{len(mapped)} filtered source events explicitly labeled India and inside India's approximate bounds. "
-                "Only India-located records are shown in the event stream."
+                "India government alerts without coordinates use an approximate state-center marker. Only India-located records are shown in the event stream."
             )
     with list_col:
         with st.container(border=True):
