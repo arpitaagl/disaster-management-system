@@ -537,14 +537,17 @@ def test_ambulance_availability_fallback_never_claims_dispatch():
         assert "cannot call responders" not in answer.casefold(), question
 
 
-def test_dispatch_fallback_never_claims_an_ambulance_was_sent():
+def test_dispatch_answer_never_claims_an_ambulance_was_sent(monkeypatch):
+    import components.chatbot as chatbot
+
+    monkeypatch.setattr(chatbot, "llm_configured", lambda: False)
     questions = (
         "Can you send an ambulance?",
         "Could you please get medical help here?",
         "Can someone arrange paramedics?",
     )
     for question in questions:
-        answer = _fallback(question, _empty_center())
+        answer = chatbot.answer_question(question, _empty_center())
         assert "local emergency services" in answer.casefold(), question
         assert "cannot call responders" in answer.casefold(), question
         assert "sent an ambulance" not in answer.casefold(), question
