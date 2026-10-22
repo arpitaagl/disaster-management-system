@@ -504,7 +504,14 @@ def render_live_disaster_intelligence() -> None:
                 selection_mode="single-object",
                 key="india-incident-map",
             )
-            selected_objects = map_selection.selection.get("objects", {}).get("india-incident-markers", [])
+            selection = map_selection.selection
+            selected_objects = selection.get("objects", {}).get("india-incident-markers", [])
+            if not selected_objects:
+                selected_indices = selection.get("indices", {}).get("india-incident-markers", [])
+                if selected_indices:
+                    selected_index = selected_indices[0]
+                    if 0 <= selected_index < len(mapped):
+                        selected_objects = [mapped.iloc[selected_index].to_dict()]
             if selected_objects:
                 selected_incident = selected_objects[0]
                 # Ignore an old selection if the user changes map filters.
@@ -520,6 +527,9 @@ def render_live_disaster_intelligence() -> None:
                         precision_note = " · approximate marker; feed did not provide precise coordinates" if approximate else ""
                         st.write("**Location:**", f"{location_text} ({lat:.3f}, {lon:.3f}){precision_note}")
                         description = str(selected_incident.get("Alert / magnitude") or "No short description provided")
+                        description = " ".join(description.split())
+                        if len(description) > 280:
+                            description = description[:277].rsplit(" ", 1)[0] + "..."
                         st.write("**Description:**", description)
                         st.write("**Time (UTC):**", selected_incident.get("Event time (UTC)", "Time not provided"))
                         st.write("**Source:**", selected_incident.get("Source", "Source not provided"))
