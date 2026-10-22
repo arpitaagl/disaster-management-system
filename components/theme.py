@@ -1613,13 +1613,14 @@ def render_header(center: CommandCenter, subtitle: str) -> None:
     st.markdown(
         f"""
         <style>
-        .resq-assistant-link {{ position:fixed;top:1rem;right:1.5rem;z-index:1000002;width:58px;height:58px;display:block;border-radius:50%;overflow:hidden;box-shadow:0 6px 18px rgba(15,23,42,.25); }}
-        .resq-assistant-link img {{ width:100%;height:100%;object-fit:cover;display:block; }}
+        div[data-testid="stPageLink"] {{ position:fixed !important; top:1rem !important; right:1.5rem !important; z-index:1000002 !important; width:58px !important; height:58px !important; }}
+        div[data-testid="stPageLink"] a {{ width:58px !important; height:58px !important; padding:0 !important; border:0 !important; border-radius:50% !important; overflow:hidden !important; background:url('{icon_src}') center/cover no-repeat !important; box-shadow:0 6px 18px rgba(15,23,42,.25) !important; }}
+        div[data-testid="stPageLink"] a > div {{ display:none !important; }}
         </style>
-        <a class="resq-assistant-link" href="/ResQ%20Assistant" target="_blank" rel="noopener" title="Open ResQ Assistant chat" aria-label="Open ResQ Assistant chat"><img src="{icon_src}" alt="ResQ Assistant"></a>
         """,
         unsafe_allow_html=True,
     )
+    st.page_link("pages/6_ResQ_Assistant.py", label="", icon="🤖", help="Open ResQ Assistant chat", width="content")
     st.markdown(
         f"""
         <div class="resq-header">
