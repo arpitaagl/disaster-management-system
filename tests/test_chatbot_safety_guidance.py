@@ -482,11 +482,13 @@ def test_phase2_live_operational_smoke_prompts_remain_deterministic(monkeypatch)
     assert "incomplete or simulated" in resources
 
     hospitals = chatbot.answer_question("Which hospitals have available beds?", center)
-    assert "Checking resources" in hospitals
-    assert "incomplete or simulated" in hospitals
+    assert "Reported available hospital beds" in hospitals
+    assert "simulated figures" in hospitals.casefold()
+    assert "Central Hospital" in hospitals
 
     urgent = chatbot.answer_question("Which incident is most urgent?", center)
     assert urgent.strip()
+    assert "Earthquake" in urgent
     assert "simulated" in urgent.casefold() or "deterministic" in urgent.casefold()
 
     dispatch = chatbot.answer_question("Can you send an ambulance?", center)
