@@ -20,6 +20,33 @@ def _distance_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     return radius * 2 * math.atan2(math.sqrt(value), math.sqrt(max(0.0, 1 - value)))
 
 
+def _geocode_location(address: str) -> tuple[float, float] | None:
+    """Convert a user-entered address into latitude/longitude."""
+    address = address.strip()
+    if not address:
+        return None
+    headers = {"User-Agent": "ResQ-AI disaster response prototype/1.0"}
+    try:
+        response = requests.get("https://photon.komoot.io/api/", params={"q": address, "limit": 1}, headers=headers, timeout=(3, 8))
+        response.raise_for_status()
+        features = response.json().get("features") or []
+        if features:
+            coords = features[0].get("geometry", {}).get("coordinates") or []
+            if len(coords) >= 2:
+                return float(coords[1]), float(coords[0])
+    except (requests.RequestException, ValueError, TypeError, IndexError):
+        pass
+    try:
+        response = requests.get("https://nominatim.openstreetmap.org/search", params={"q": address, "format": "jsonv2", "limit": 1}, headers=headers, timeout=(3, 8))
+        response.raise_for_status()
+        results = response.json()
+        if results:
+            return float(results[0]["lat"]), float(results[0]["lon"])
+    except (requests.RequestException, ValueError, TypeError, KeyError, IndexError):
+        pass
+    return None
+
+
 def _find_nearby_services(lat: float, lon: float, radius_m: int = 10000) -> list[dict]:
     """Find nearby public-map-listed hospitals and emergency services; no database required."""
     query = f"""
@@ -95,7 +122,7 @@ with st.form("report_form"):
         manual_address = st.text_input(
             "Incident address or landmark",
             placeholder="e.g., Sector 18 Metro Station, Noida",
-            help="Enter the nearest address or landmark. Coordinates below are required for mapping."
+            help="Enter a location such as Sector 80, Noida. ResQ-AI will try to locate it automatically; coordinates are a fallback."
         )
         coord_cols = st.columns(2)
         manual_lat = coord_cols[0].number_input(
@@ -120,6 +147,13 @@ if submitted:
     if not selected_address:
         errors = ["Enter an incident address or nearby landmark."]
     else:
+        with st.spinner("Locating the entered address…"):
+            geocoded = _geocode_location(selected_address)
+        if geocoded:
+            lat, lon = geocoded
+            st.success(f"Location found for: {selected_address}")
+        else:
+            st.warning("Could not automatically locate this address. Using the coordinates entered below; please check they match the incident location.")
         errors = validate_report(description, people, lat, lon)
     if errors:
         for err in errors:
@@ -138,6 +172,7 @@ if submitted:
                 accessibility=accessibility,
                 reporter=reporter,
                 image_name=image_name,
+                location_text=selected_address,
             )
             analysis = result["analysis"]
             incident = result["incident"]
