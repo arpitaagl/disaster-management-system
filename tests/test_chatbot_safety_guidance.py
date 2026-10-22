@@ -308,6 +308,40 @@ def test_count_question_with_no_matching_records_returns_zero():
 
 
 
+
+def test_emergency_dispatch_requests_preempt_resource_lookup_and_llm(monkeypatch):
+    import components.chatbot as chatbot
+
+    monkeypatch.setattr(chatbot, "llm_configured", lambda: True)
+
+    def unexpected_llm_call(*args, **kwargs):
+        raise AssertionError("Emergency dispatch requests must be handled deterministically")
+
+    monkeypatch.setattr(chatbot.LLMClient, "complete_json", unexpected_llm_call)
+    center = _empty_center()
+
+    for question in (
+        "Can you send an ambulance?",
+        "please dispatch an ambulance",
+        "I need an ambulance",
+        "can someone send paramedics",
+        "send medical help now",
+    ):
+        answer = chatbot.answer_question(question, center)
+        assert "local emergency services" in answer, question
+        assert "cannot call responders or dispatch resources" in answer, question
+        assert "resources" not in answer.casefold() or "dispatch resources" in answer.casefold(), question
+
+
+def test_ambulance_availability_question_is_not_misclassified_as_dispatch_request(monkeypatch):
+    import components.chatbot as chatbot
+
+    monkeypatch.setattr(chatbot, "llm_configured", lambda: False)
+    answer = chatbot.answer_question("Which ambulance resources are available?", _empty_center())
+
+    assert "resources" in answer.casefold()
+    assert "local emergency services" not in answer.casefold()
+
 def test_chatbot_intent_collisions_route_to_the_right_answer(monkeypatch):
     import components.chatbot as chatbot
 
