@@ -13,7 +13,6 @@
     #map { width: 100%; height: 390px; border-radius: 12px; border: 1px solid #dbe2ea; z-index: 0; }
     #selected { font-size: 13px; color: #334155; line-height: 1.4; overflow-wrap: anywhere; }
     #status { font-size: 12px; color: #64748b; }
-    .leaflet-control-attribution { font-size: 10px; }
   </style>
 </head>
 <body>
@@ -29,7 +28,7 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 <script>
 (function () {
-  let map, marker, currentSelection = null, componentReady = false;
+  let map, marker, componentReady = false;
   const search = document.getElementById("search");
   const selected = document.getElementById("selected");
   const status = document.getElementById("status");
@@ -38,10 +37,10 @@
   }
   function setHeight() { send("streamlit:setFrameHeight", 500); }
   function emitSelection(latlng, address) {
-    currentSelection = {lat: Number(latlng.lat), lon: Number(latlng.lng), address: address || ""};
+    const selection = {lat: Number(latlng.lat), lon: Number(latlng.lng), address: address || ""};
     selected.textContent = (address || "Selected map location") + " · " +
-      currentSelection.lat.toFixed(6) + ", " + currentSelection.lon.toFixed(6);
-    send("streamlit:setComponentValue", currentSelection);
+      selection.lat.toFixed(6) + ", " + selection.lon.toFixed(6);
+    send("streamlit:setComponentValue", selection);
   }
   async function reverseGeocode(latlng) {
     status.textContent = "Looking up the selected address…";
@@ -60,14 +59,13 @@
   }
   function placeAt(latlng, address) {
     marker.setLatLng(latlng);
+    marker.setOpacity(1);
     map.panTo(latlng);
     map.setZoom(Math.max(map.getZoom(), 15));
     if (address) {
       emitSelection(latlng, address);
       status.textContent = "Location selected. Confirm the pin is at the incident site.";
-    } else {
-      reverseGeocode(latlng);
-    }
+    } else reverseGeocode(latlng);
   }
   async function searchPlace() {
     const query = search.value.trim();
@@ -80,9 +78,8 @@
       const results = await response.json();
       if (!results.length) { status.textContent = "No matching places found. Try a more specific search or click the map."; return; }
       const place = results[0];
-      const latlng = L.latLng(Number(place.lat), Number(place.lon));
-      placeAt(latlng, place.display_name || query);
-      status.textContent = results.length > 1 ? "Showing the best match. If it is incorrect, refine your search or click the map." : "Location selected.";
+      placeAt(L.latLng(Number(place.lat), Number(place.lon)), place.display_name || query);
+      status.textContent = results.length > 1 ? "Showing the best match. Refine your search or click the map if needed." : "Location selected.";
     } catch (error) {
       status.textContent = "Place search is temporarily unavailable. You can still select a location by clicking the map.";
     }
@@ -90,10 +87,7 @@
   function init(args) {
     const lat = Number(args.defaultLat || 20.5937);
     const lon = Number(args.defaultLng || 78.9629);
-    if (!window.L) {
-      status.textContent = "The map library could not load. Check your internet connection.";
-      return;
-    }
+    if (!window.L) { status.textContent = "The map library could not load. Check your internet connection."; return; }
     if (!map) {
       map = L.map("map").setView([lat, lon], 5);
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -109,17 +103,13 @@
       status.textContent = "Search for a place, click the map, or drag the pin to refine the location.";
       setTimeout(() => map.invalidateSize(), 100);
     }
-    marker.setLatLng([lat, lon]);
     setHeight();
   }
   window.addEventListener("message", function(event) {
     const data = event.data || {};
     if (data.type === "streamlit:render") {
       window.__streamlitArgs = data.args || {};
-      if (!componentReady) {
-        init(window.__streamlitArgs);
-        componentReady = true;
-      }
+      if (!componentReady) { init(window.__streamlitArgs); componentReady = true; }
     }
   });
   send("streamlit:componentReady", {apiVersion: 1});
