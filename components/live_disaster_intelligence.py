@@ -292,7 +292,7 @@ def render_live_disaster_intelligence() -> None:
         searchable = filtered[["Hazard", "Event", "Area", "Alert / magnitude", "Source"]].fillna("").astype(str)
         filtered = filtered[searchable.apply(lambda col: col.str.casefold().str.contains(term, regex=False)).any(axis=1)]
 
-    map_col, list_col = st.columns([1.5, 1], gap="large")
+    map_col, list_col = st.columns([2, 1], gap="large")
     with map_col:
         with st.container(border=True):
             st.markdown("### India hazard map")
@@ -313,12 +313,44 @@ def render_live_disaster_intelligence() -> None:
                 | mapped["Event"].fillna("").astype(str).str.contains(r"\bindia\b", case=False, regex=True)
             )
             mapped = mapped[india_label].reset_index(drop=True)
+            # Keep the marker palette consistent between the map and its legend.
+            hazard_palette = [
+                ("Flood", "#ef4444", [239, 68, 68, 245]),
+                ("Drought", "#eab308", [234, 179, 8, 245]),
+                ("Earthquake", "#8b5cf6", [139, 92, 246, 245]),
+                ("Cyclone", "#06b6d4", [6, 182, 212, 245]),
+                ("Storm", "#3b82f6", [59, 130, 246, 245]),
+                ("Wildfire", "#f97316", [249, 115, 22, 245]),
+                ("Landslide", "#22c55e", [34, 197, 94, 245]),
+                ("Other", "#ec4899", [236, 72, 153, 245]),
+            ]
+
+            def marker_color(hazard):
+                hazard_name = str(hazard or "").casefold()
+                for label, _, rgba in hazard_palette[:-1]:
+                    if label.casefold() in hazard_name:
+                        return rgba
+                return hazard_palette[-1][2]
+
+            mapped["Marker color"] = mapped["Hazard"].map(marker_color)
+            mapped["Glow color"] = mapped["Marker color"].map(
+                lambda color: [color[0], color[1], color[2], 62]
+            )
+            legend_items = "".join(
+                f'<span style="display:inline-flex;align-items:center;gap:.38rem;margin:0 .8rem .4rem 0;white-space:nowrap;">'
+                f'<i style="width:.72rem;height:.72rem;border-radius:50%;background:{color};box-shadow:0 0 9px {color};display:inline-block;"></i>{label}</span>'
+                for label, color, _ in hazard_palette
+            )
+            st.markdown(
+                f'<div style="font-size:.82rem;line-height:1.8;padding:.15rem 0 .35rem;">{legend_items}</div>',
+                unsafe_allow_html=True,
+            )
             india_glow_layer = pdk.Layer(
                 "ScatterplotLayer",
                 id="india-incident-glow",
                 data=mapped,
                 get_position="[Longitude, Latitude]",
-                get_fill_color=[255, 170, 0, 58],
+                get_fill_color="Glow color",
                 get_radius=105000,
                 radius_min_pixels=13,
                 radius_max_pixels=28,
@@ -330,7 +362,7 @@ def render_live_disaster_intelligence() -> None:
                 id="india-incident-markers",
                 data=mapped,
                 get_position="[Longitude, Latitude]",
-                get_fill_color=[255, 198, 0, 245],
+                get_fill_color="Marker color",
                 get_line_color=[255, 255, 255, 255],
                 get_radius=50000,
                 radius_min_pixels=8,
@@ -349,7 +381,7 @@ def render_live_disaster_intelligence() -> None:
             map_selection = st.pydeck_chart(
                 india_deck,
                 use_container_width=True,
-                height=460,
+                height=560,
                 on_select="rerun",
                 selection_mode="single-object",
                 key="india-incident-map",
