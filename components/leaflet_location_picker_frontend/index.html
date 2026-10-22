@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+  <style>
+    html, body { margin: 0; padding: 0; font-family: Arial, sans-serif; color: #172033; }
+    .wrap { display: grid; gap: 9px; }
+    .searchrow { display: flex; gap: 8px; }
+    .search { min-width: 0; flex: 1; box-sizing: border-box; padding: 11px 12px; border: 1px solid #cbd5e1; border-radius: 9px; font-size: 14px; }
+    button { padding: 10px 14px; border: 0; border-radius: 9px; background: #0f766e; color: white; cursor: pointer; font-weight: 600; }
+    #map { width: 100%; height: 390px; border-radius: 12px; border: 1px solid #dbe2ea; z-index: 0; }
+    #selected { font-size: 13px; color: #334155; line-height: 1.4; overflow-wrap: anywhere; }
+    #status { font-size: 12px; color: #64748b; }
+    .leaflet-control-attribution { font-size: 10px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="searchrow">
+      <input id="search" class="search" placeholder="Search an address, landmark, or place…" autocomplete="off">
+      <button id="searchButton" type="button">Search</button>
+    </div>
+    <div id="map" aria-label="Select incident location on the map"></div>
+    <div id="selected">Search for a place or click the map to select the incident location.</div>
+    <div id="status">Map data © OpenStreetMap contributors.</div>
+  </div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script>
+(function () {
+  let map, marker, currentSelection = null, componentReady = false;
+  const search = document.getElementById("search");
+  const selected = document.getElementById("selected");
+  const status = document.getElementById("status");
+  function send(type, value) {
+    window.parent.postMessage({isStreamlitMessage: true, type: type, value: value}, "*");
+  }
+  function setHeight() { send("streamlit:setFrameHeight", 500); }
+  function emitSelection(latlng, address) {
+    currentSelection = {lat: Number(latlng.lat), lon: Number(latlng.lng), address: address || ""};
+    selected.textContent = (address || "Selected map location") + " · " +
+      currentSelection.lat.toFixed(6) + ", " + currentSelection.lon.toFixed(6);
+    send("streamlit:setComponentValue", currentSelection);
+  }
+  async function reverseGeocode(latlng) {
+    status.textContent = "Looking up the selected address…";
+    try {
+      const url = "https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=" +
+        encodeURIComponent(latlng.lat) + "&lon=" + encodeURIComponent(latlng.lng);
+      const response = await fetch(url, {headers: {"Accept": "application/json"}});
+      if (!response.ok) throw new Error("Address lookup unavailable");
+      const data = await response.json();
+      emitSelection(latlng, data.display_name || "");
+      status.textContent = "Location selected. Confirm the pin is at the incident site.";
+    } catch (error) {
+      emitSelection(latlng, "");
+      status.textContent = "Coordinates selected. Address lookup is unavailable; you can still submit the location.";
+    }
+  }
+  function placeAt(latlng, address) {
+    marker.setLatLng(latlng);
+    map.panTo(latlng);
+    map.setZoom(Math.max(map.getZoom(), 15));
+    if (address) {
+      emitSelection(latlng, address);
+      status.textContent = "Location selected. Confirm the pin is at the incident site.";
+    } else {
+      reverseGeocode(latlng);
+    }
+  }
+  async function searchPlace() {
+    const query = search.value.trim();
+    if (!query) { status.textContent = "Enter an address, landmark, or place to search."; return; }
+    status.textContent = "Searching for the location…";
+    try {
+      const url = "https://nominatim.openstreetmap.org/search?format=jsonv2&limit=5&q=" + encodeURIComponent(query);
+      const response = await fetch(url, {headers: {"Accept": "application/json"}});
+      if (!response.ok) throw new Error("Search unavailable");
+      const results = await response.json();
+      if (!results.length) { status.textContent = "No matching places found. Try a more specific search or click the map."; return; }
+      const place = results[0];
+      const latlng = L.latLng(Number(place.lat), Number(place.lon));
+      placeAt(latlng, place.display_name || query);
+      status.textContent = results.length > 1 ? "Showing the best match. If it is incorrect, refine your search or click the map." : "Location selected.";
+    } catch (error) {
+      status.textContent = "Place search is temporarily unavailable. You can still select a location by clicking the map.";
+    }
+  }
+  function init(args) {
+    const lat = Number(args.defaultLat || 20.5937);
+    const lon = Number(args.defaultLng || 78.9629);
+    if (!window.L) {
+      status.textContent = "The map library could not load. Check your internet connection.";
+      return;
+    }
+    if (!map) {
+      map = L.map("map").setView([lat, lon], 5);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 19,
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a>'
+      }).addTo(map);
+      marker = L.marker([lat, lon], {draggable: true}).addTo(map);
+      marker.setOpacity(0);
+      map.on("click", event => placeAt(event.latlng, ""));
+      marker.on("dragend", event => placeAt(event.target.getLatLng(), ""));
+      document.getElementById("searchButton").addEventListener("click", searchPlace);
+      search.addEventListener("keydown", event => { if (event.key === "Enter") { event.preventDefault(); searchPlace(); } });
+      status.textContent = "Search for a place, click the map, or drag the pin to refine the location.";
+      setTimeout(() => map.invalidateSize(), 100);
+    }
+    marker.setLatLng([lat, lon]);
+    setHeight();
+  }
+  window.addEventListener("message", function(event) {
+    const data = event.data || {};
+    if (data.type === "streamlit:render") {
+      window.__streamlitArgs = data.args || {};
+      if (!componentReady) {
+        init(window.__streamlitArgs);
+        componentReady = true;
+      }
+    }
+  });
+  send("streamlit:componentReady", {apiVersion: 1});
+  setHeight();
+})();
+</script>
+</body>
+</html>
