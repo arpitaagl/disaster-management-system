@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 import math
+from pathlib import Path
 import requests
 import streamlit as st
 
@@ -43,25 +45,35 @@ center = get_center()
 render_sidebar(center)
 render_header(center, "Submit an emergency report · NLP extracts facts · the priority engine scores independently")
 
-# The map component is temporarily omitted from the reporting form.
-# Users can enter the incident landmark and coordinates directly below.
+@st.cache_data(show_spinner=False)
+def _load_india_locations() -> list[dict]:
+    """Load the bundled India state/UT and district directory."""
+    data_path = Path(__file__).resolve().parents[1] / "data" / "india_states_districts.min.json"
+    with data_path.open("r", encoding="utf-8") as file:
+        return json.load(file)
+
+
+india_locations = _load_india_locations()
+state_names = [item["name"] for item in india_locations]
 lat = float(CITY_LAT)
 lon = float(CITY_LON)
 selected_address = ""
 
 with st.form("report_form"):
     description = st.text_area("Incident description", placeholder="Describe what happened, hazards, and people affected", height=140)
-    if selected_address:
-        st.text_input("Selected incident location", value=selected_address, disabled=True)
-        manual_address = selected_address
-        manual_lat = lat
-        manual_lon = lon
-    else:
-        manual_address = st.text_input(
-            "Incident address or landmark",
-            placeholder="e.g., Sector 18 Metro Station, Noida",
-            help="Enter a location such as Sector 80, Noida. ResQ-AI will try to locate it automatically; coordinates are a fallback."
-        )
+    st.markdown("#### Incident location")
+    st.caption("Select the Indian state/UT and district, then enter the city and the most precise address or landmark available.")
+    state_name = st.selectbox("State / Union Territory", state_names, index=state_names.index("Uttar Pradesh") if "Uttar Pradesh" in state_names else 0)
+    selected_state = next(item for item in india_locations if item["name"] == state_name)
+    district_names = sorted(district["name"] for district in selected_state.get("districts", []))
+    district_name = st.selectbox("District", district_names)
+    city_name = st.text_input("City / Town / Village", placeholder="e.g., Noida")
+    manual_address = st.text_input(
+        "Full address / landmark",
+        placeholder="e.g., Sector 18 Metro Station, near Gate 2",
+        help="Add a street, sector, building, landmark, or other detail that helps responders locate the incident."
+    )
+    with st.expander("Advanced: coordinates (only if address lookup fails)"):
         coord_cols = st.columns(2)
         manual_lat = coord_cols[0].number_input(
             "Latitude", min_value=-90.0, max_value=90.0, value=float(CITY_LAT), format="%.6f"
@@ -69,7 +81,7 @@ with st.form("report_form"):
         manual_lon = coord_cols[1].number_input(
             "Longitude", min_value=-180.0, max_value=180.0, value=float(CITY_LON), format="%.6f"
         )
-        st.caption("Coordinates default to the configured city centre. Change them to the incident's actual coordinates for accurate location-based recommendations.")
+        st.caption("Coordinates start at the configured city centre. If geocoding fails, enter the actual incident coordinates before submitting.")
     people = st.number_input("Estimated people affected", min_value=0, value=0, step=1)
     accessibility = st.selectbox("Observed accessibility", ["Open", "Restricted", "Blocked"], index=0)
     reporter = st.text_input("Reporter (optional)", placeholder="Name or call sign")
@@ -77,21 +89,22 @@ with st.form("report_form"):
     submitted = st.form_submit_button("ANALYZE INCIDENT", use_container_width=True)
 
 if submitted:
-    # Use the map selection when available; otherwise accept the manual fallback.
-    if not selected_address:
-        selected_address = manual_address.strip()
-        lat = float(manual_lat)
-        lon = float(manual_lon)
-    if not selected_address:
-        errors = ["Enter an incident address or nearby landmark."]
+    city_name = city_name.strip()
+    landmark = manual_address.strip()
+    location_parts = [part for part in [landmark, city_name, district_name, state_name, "India"] if part]
+    selected_address = ", ".join(location_parts)
+    lat = float(manual_lat)
+    lon = float(manual_lon)
+    if not city_name:
+        errors = ["Enter the incident city, town, or village."]
     else:
-        with st.spinner("Locating the entered address…"):
+        with st.spinner("Locating the selected Indian address…"):
             geocoded = _geocode_location(selected_address)
         if geocoded:
             lat, lon = geocoded
             st.success(f"Location found for: {selected_address}")
         else:
-            st.warning("Could not automatically locate this address. Using the coordinates entered below; please check they match the incident location.")
+            st.warning("Could not automatically locate this address. Using the coordinates in Advanced settings; please confirm they match the incident location.")
         errors = validate_report(description, people, lat, lon)
     if errors:
         for err in errors:
