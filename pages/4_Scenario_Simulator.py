@@ -59,7 +59,7 @@ def _distance_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 
 
 @st.cache_data(ttl=600, show_spinner=False)
-def _nearby_public_services(lat: float, lon: float, radius_m: int = 15000) -> list[dict]:
+def _nearby_public_services(lat: float, lon: float, radius_m: int = 25000) -> list[dict]:
     """Find public-map-listed facilities through multiple Overpass mirrors."""
     query = f"""
     [out:json][timeout:12];
@@ -77,14 +77,28 @@ def _nearby_public_services(lat: float, lon: float, radius_m: int = 15000) -> li
     )
     payload = None
     last_error = None
+    # Public Overpass mirrors can be rate-limited. Try POST and GET on each mirror
+    # with bounded timeouts before reporting an outage.
     for endpoint in endpoints:
-        try:
-            response = requests.post(endpoint, data={"data": query}, headers=headers, timeout=(4, 12))
-            response.raise_for_status()
-            payload = response.json()
+        for method in ("post", "get"):
+            try:
+                if method == "post":
+                    response = requests.post(
+                        endpoint, data={"data": query}, headers=headers, timeout=(3, 8)
+                    )
+                else:
+                    response = requests.get(
+                        endpoint, params={"data": query}, headers=headers, timeout=(3, 8)
+                    )
+                response.raise_for_status()
+                candidate = response.json()
+                if isinstance(candidate, dict) and isinstance(candidate.get("elements"), list):
+                    payload = candidate
+                    break
+            except (requests.RequestException, ValueError) as exc:
+                last_error = exc
+        if payload is not None:
             break
-        except (requests.RequestException, ValueError) as exc:
-            last_error = exc
     if payload is None:
         raise requests.RequestException("All public map directory endpoints failed") from last_error
 
@@ -172,22 +186,23 @@ try:
 except (TypeError, ValueError):
     people_label = str(people or "Not provided")
 lat, lon = incident.get("lat"), incident.get("lon")
-location_text = str(incident.get("location_text") or "").strip()
+saved_location_text = str(incident.get("location_text") or "").strip()
+location_text = location_override.strip() or saved_location_text
 location = location_text or (
     f"{lat}, {lon}"
     if lat is not None and lon is not None
     else "Location not available"
 )
-# Prefer the address typed by the reporter. Older reports without a saved address use coordinates.
+# Prefer the address entered here or saved by the reporter. Never silently use stale
+# coordinates if an explicitly entered address cannot be resolved.
 if location_text:
-    # Never silently search an old/default coordinate when the typed address cannot be resolved.
     lat, lon = None, None
     with st.spinner("Resolving the reported address for nearby-service search…"):
         resolved = _geocode_incident_location(location_text)
     if resolved:
         lat, lon = resolved
     else:
-        st.warning("Could not locate this address automatically. Check the spelling or clear the location field to use the report's saved coordinates.")
+        st.warning("Could not locate this address automatically. Check the spelling or enter a more specific address (area, city) before searching nearby services.")
 
 a, b, c, d = st.columns(4)
 score = incident.get("priority_score")
@@ -231,7 +246,7 @@ else:
                     service_cols[2].caption("Publicly listed number; call to confirm.")
             st.caption("Source: OpenStreetMap public directory. Contact details are displayed only when listed; they are not independently phone-verified by ResQ-AI.")
         else:
-            st.warning("No nearby hospitals or emergency-service locations were found in the public directory within 15 km. Contact local emergency services directly.")
+            st.warning("No nearby hospitals or emergency-service locations were found in the public directory within 25 km. Contact local emergency services directly.")
     except Exception:
         st.warning("The public service directory could not be reached right now. No facilities or phone numbers have been invented. Please contact local emergency services directly.")
 
