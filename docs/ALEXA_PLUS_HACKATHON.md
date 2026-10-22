@@ -2,6 +2,8 @@
 
 ResQ-AI adds a read-only MCP server and a polished web-based response-assistant page. The self-hosted MCP server is the primary Alexa+ track artifact; the Streamlit assistant provides the conversational demo surface. The hackathon's official rules require a self-hosted MCP server using MCP spec 2025-11-25 or later over Streamable HTTP, or an Agent Skill; the rules also allow a web-based simulated experience. See the [official rules](https://amazonappdev2026.devpost.com/rules) and [Alexa+ MCP requirements](https://www.developer.amazon.com/docs/alexaplus/add-ons/mcp-toolkit-quickstart).
 
+**Authentication status:** This repository is not yet production-ready for direct Alexa+ onboarding. See the [Alexa+ authentication readiness audit](ALEXA_PLUS_AUTH_READINESS.md) for the current gaps and the implementation checklist. Do not expose the unauthenticated local MCP endpoint to the public internet.
+
 ## Implemented MCP tools
 
 - `list_incidents`: list active/resolved/all incidents ordered by existing deterministic priority score.
