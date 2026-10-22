@@ -64,7 +64,7 @@ Incident reports and operational inventory use Supabase Postgres when configured
 - Separate Alexa Skills Kit custom-skill starter with voice intents for earthquake, flood, cyclone, fire, heat, emergency help, and preparedness
 - Optional Amazon Bedrock briefing tool for the AWS Builder mini-challenge\n- Live Government Alerts page for IMD district nowcasts/warnings and an authorized NDMA SACHET/CAP feed
 - Incident Operations workflow, operator notes and audit timeline
-- Situation Reports with Markdown/JSON/CSV exports
+- Situation Reports with formatted PDF exports for the situation summary, full snapshot, incident register, and audit/event log
 - Optional driving route estimates with explicit hazard-routing caveats
 - Operator-triggered SMTP situation-summary notifications
 - LOAD DEMO DISASTER for a 3–5 minute walkthrough
