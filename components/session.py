@@ -41,20 +41,19 @@ def get_center() -> CommandCenter:
                     center.shelters = inventory.get("shelters", [])
                     st.session_state.inventory_store_error = None
                 except Exception as inventory_exc:
-                    # Incident persistence may already exist on older deployments.
-                    # Inventory requires migrations/002_operational_inventory.sql.
+                    # Inventory is optional for the core incident-reporting flow.
                     st.session_state.inventory_store_error = (
-                        f"Operational inventory tables are not ready ({type(inventory_exc).__name__}). "
-                        "Run migrations/002_operational_inventory.sql in Supabase."
+                        f"Operational inventory is unavailable ({type(inventory_exc).__name__})."
                     )
                 center.recalculate(reason="Loaded saved incidents and available operational inventory")
             except Exception as exc:
-                # Don't silently show an empty queue when the database could not load.
+                # Keep the app usable when persistence is unavailable. The incident
+                # reporting flow can still run in session-only mode; persistence can
+                # be configured later without blocking the map or analysis UI.
+                st.session_state.incident_store_configured = False
                 st.session_state.incident_store_error = (
-                    f"Saved incident reports could not be loaded ({type(exc).__name__}). "
-                    "Check the DATABASE_URL secret and Supabase table migration."
+                    f"Incident database unavailable ({type(exc).__name__}); using session-only mode."
                 )
-                st.error(st.session_state.incident_store_error)
 
         if llm_configured():
             center.ai_mode = "AI Mode: Active"
