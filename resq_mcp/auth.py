@@ -24,7 +24,7 @@ class Auth0JWTVerifier(TokenVerifier):
             raise ValueError("AUTH0_AUDIENCE must not be empty")
         self.issuer = f"https://{domain}/"
         self.audience = audience.strip()
-        self.resource_url = resource_url.strip().rstrip("/")
+        self.resource_url = resource_url.strip()
         self.jwks = PyJWKClient(f"https://{domain}/.well-known/jwks.json")
 
     async def verify_token(self, token: str) -> AccessToken | None:
