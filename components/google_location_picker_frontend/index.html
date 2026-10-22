@@ -1,0 +1,97 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    html, body { margin: 0; padding: 0; font-family: Arial, sans-serif; color: #172033; }
+    .wrap { display: grid; gap: 9px; }
+    .search { width: 100%; box-sizing: border-box; padding: 11px 12px; border: 1px solid #cbd5e1; border-radius: 9px; font-size: 14px; }
+    #map { width: 100%; height: 390px; border-radius: 12px; border: 1px solid #dbe2ea; }
+    #selected { font-size: 13px; color: #334155; line-height: 1.4; }
+    #status { font-size: 12px; color: #64748b; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <input id="search" class="search" placeholder="Search an address, landmark, or place…" autocomplete="off">
+    <div id="map"></div>
+    <div id="selected">Search for a place or click the map to select the incident location.</div>
+    <div id="status"></div>
+  </div>
+<script>
+(function () {
+  let map, marker, geocoder, autocomplete, currentSelection = null, apiLoaded = false;
+  const search = document.getElementById("search");
+  const selected = document.getElementById("selected");
+  const status = document.getElementById("status");
+  function send(type, value) {
+    window.parent.postMessage({isStreamlitMessage: true, type: type, value: value}, "*");
+  }
+  function setHeight() { send("streamlit:setFrameHeight", 500); }
+  function emitSelection(location, address) {
+    currentSelection = {lat: Number(location.lat()), lon: Number(location.lng()), address: address || ""};
+    selected.textContent = (address || "Selected map location") + " · " +
+      currentSelection.lat.toFixed(6) + ", " + currentSelection.lon.toFixed(6);
+    send("streamlit:setComponentValue", currentSelection);
+  }
+  function placeAt(location, address) {
+    marker.setPosition(location);
+    map.panTo(location);
+    map.setZoom(Math.max(map.getZoom(), 16));
+    if (address) { emitSelection(location, address); return; }
+    geocoder.geocode({location: location}, function(results, statusResult) {
+      const label = statusResult === "OK" && results && results[0] ? results[0].formatted_address : "";
+      emitSelection(location, label);
+    });
+  }
+  window.initIncidentMap = function() {
+    apiLoaded = true;
+    const args = window.__streamlitArgs || {};
+    const center = {lat: Number(args.defaultLat || 20.5937), lng: Number(args.defaultLng || 78.9629)};
+    map = new google.maps.Map(document.getElementById("map"), {
+      center: center, zoom: 5, mapTypeControl: true, streetViewControl: false,
+      fullscreenControl: true, clickableIcons: true
+    });
+    geocoder = new google.maps.Geocoder();
+    marker = new google.maps.Marker({map: map, draggable: true, title: "Incident location"});
+    map.addListener("click", function(event) { placeAt(event.latLng, ""); });
+    marker.addListener("dragend", function(event) { placeAt(event.latLng, ""); });
+    autocomplete = new google.maps.places.Autocomplete(search, {fields: ["formatted_address", "geometry", "name"]});
+    autocomplete.bindTo("bounds", map);
+    autocomplete.addListener("place_changed", function() {
+      const place = autocomplete.getPlace();
+      if (!place.geometry || !place.geometry.location) {
+        status.textContent = "Choose a result from the suggestions to select its exact location.";
+        return;
+      }
+      const address = place.formatted_address || place.name || "";
+      placeAt(place.geometry.location, address);
+    });
+    status.textContent = "Search for a place, click the map, or drag the pin to refine the location.";
+    setHeight();
+  };
+  window.addEventListener("message", function(event) {
+    const data = event.data || {};
+    if (data.type === "streamlit:render") {
+      window.__streamlitArgs = data.args || {};
+      if (!apiLoaded) {
+        const key = window.__streamlitArgs.apiKey || "";
+        if (!key) {
+          status.textContent = "Google Maps API key is missing. Configure GOOGLE_MAPS_API_KEY in Streamlit secrets.";
+          return;
+        }
+        const script = document.createElement("script");
+        script.src = "https://maps.googleapis.com/maps/api/js?key=" + encodeURIComponent(key) + "&libraries=places&callback=initIncidentMap";
+        script.async = true; script.defer = true;
+        script.onerror = function() { status.textContent = "Google Maps could not load. Check the API key, billing, and Maps JavaScript API / Places API settings."; };
+        document.head.appendChild(script);
+      }
+    }
+  });
+  send("streamlit:componentReady", {apiVersion: 1});
+  setHeight();
+})();
+</script>
+</body>
+</html>
