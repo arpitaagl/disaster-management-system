@@ -67,13 +67,19 @@ class Auth0JWTVerifier(TokenVerifier):
 
 
 def auth_configuration() -> tuple[Auth0JWTVerifier, Any] | None:
-    """Build MCP auth settings when explicitly configured; fail closed on partial setup."""
+    """Build MCP auth settings; fail closed on partial or missing public configuration."""
     domain = os.getenv("AUTH0_DOMAIN", "").strip()
     audience = os.getenv("AUTH0_AUDIENCE", "").strip()
     public_url = os.getenv("MCP_PUBLIC_URL", "").strip()
     configured = (bool(domain), bool(audience), bool(public_url))
     if not any(configured):
-        return None  # Local development only; do not expose this mode publicly.
+        # Local development may run without Auth0, but a public Render deployment may not.
+        if os.getenv("RENDER", "").strip().lower() == "true":
+            raise RuntimeError(
+                "Public Render deployments require AUTH0_DOMAIN, AUTH0_AUDIENCE, and "
+                "MCP_PUBLIC_URL. Configure all three before starting the MCP service."
+            )
+        return None
     if not all(configured):
         raise RuntimeError(
             "Configure AUTH0_DOMAIN, AUTH0_AUDIENCE, and MCP_PUBLIC_URL together; "
