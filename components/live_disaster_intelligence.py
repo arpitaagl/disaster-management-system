@@ -89,6 +89,20 @@ def _hazard_name(title: str, summary: str, fallback: str = "Other") -> str:
     return fallback
 
 
+def _priority_from_feed(*values: object) -> tuple[str, int]:
+    """Normalize official alert severity into a stable ordering for the map."""
+    text = " ".join(str(value or "") for value in values).casefold()
+    if any(term in text for term in ("extreme", "critical", "very severe", "red")):
+        return "Critical", 100
+    if any(term in text for term in ("severe", "high", "orange")):
+        return "High", 80
+    if any(term in text for term in ("moderate", "medium", "yellow")):
+        return "Moderate", 60
+    if any(term in text for term in ("minor", "low", "green")):
+        return "Low", 35
+    return "Unrated", 0
+
+
 def _india_marker_coordinates(area: str, index: int) -> tuple[float, float]:
     """Use a state centroid, or a labeled country-center fallback when location is vague."""
     coordinates = _approximate_india_coordinates(area)
@@ -103,22 +117,19 @@ def _india_marker_coordinates(area: str, index: int) -> tuple[float, float]:
 
 
 def _select_stream_events(frame: pd.DataFrame, limit: int = 10) -> pd.DataFrame:
-    """Keep the stream compact while reserving slots for key hazard categories."""
-    if len(frame) <= limit:
-        return frame
-    priority = [
-        "Flood", "Drought", "Landslide", "Earthquake", "Cyclone", "Heavy rainfall",
-        "Storm", "Heatwave", "Cold / snow", "Wildfire", "Other",
-    ]
-    picked: list[int] = []
-    for hazard in priority:
-        candidates = frame.index[frame["Hazard"] == hazard].tolist()
-        if candidates:
-            picked.append(candidates[0])
-        if len(picked) == limit:
-            break
-    picked.extend(index for index in frame.index if index not in picked)
-    return frame.loc[picked[:limit]]
+    """Show the highest-priority matching India incidents first."""
+    hazard_order = {
+        name: index for index, name in enumerate((
+            "Flood", "Drought", "Landslide", "Earthquake", "Cyclone", "Heavy rainfall",
+            "Storm", "Heatwave", "Cold / snow", "Wildfire", "Other",
+        ))
+    }
+    ranked = frame.assign(
+        _hazard_order=frame["Hazard"].map(hazard_order).fillna(len(hazard_order))
+    ).sort_values(
+        ["Priority score", "_hazard_order"], ascending=[False, True], kind="stable"
+    )
+    return ranked.head(limit).drop(columns="_hazard_order")
 
 
 @st.fragment(run_every=300)
@@ -177,6 +188,8 @@ def render_live_disaster_intelligence() -> None:
                     "Record": event.get("source_url") or GDACS_SOURCE_URL,
                     "Latitude": event.get("latitude"),
                     "Longitude": event.get("longitude"),
+                    "Priority": _priority_from_feed(event.get("alert_level"))[0],
+                    "Priority score": _priority_from_feed(event.get("alert_level"))[1],
                 })
         except (requests.RequestException, ValueError, TypeError) as exc:
             failures.append(("GDACS", type(exc).__name__, GDACS_SOURCE_URL))
@@ -215,6 +228,8 @@ def render_live_disaster_intelligence() -> None:
                 "Record": row.get("link") or public_result.get("source_url") or IMD_PUBLIC_CAP_URL,
                 "Latitude": _india_marker_coordinates(area, alert_index)[0],
                 "Longitude": _india_marker_coordinates(area, alert_index)[1],
+                "Priority": _priority_from_feed(row.get("severity"))[0],
+                "Priority score": _priority_from_feed(row.get("severity"))[1],
             })
     except (requests.RequestException, ValueError, TypeError):
         source_rows.append({
@@ -251,6 +266,8 @@ def render_live_disaster_intelligence() -> None:
                 "Record": row.get("link") or ndma.get("source_url") or "https://sachet.ndma.gov.in/",
                 "Latitude": _india_marker_coordinates(area, alert_index)[0],
                 "Longitude": _india_marker_coordinates(area, alert_index)[1],
+                "Priority": _priority_from_feed(row.get("severity"))[0],
+                "Priority score": _priority_from_feed(row.get("severity"))[1],
             })
     except (requests.RequestException, ValueError, TypeError):
         source_rows.append({
@@ -366,12 +383,13 @@ def render_live_disaster_intelligence() -> None:
 
     matching_count = len(filtered)
     filtered = _select_stream_events(filtered, limit=10)
+    map_events = filtered.head(8).copy()
 
     map_col, list_col = st.columns([2, 1], gap="large")
     with map_col:
         with st.container(border=True):
             st.markdown("### India hazard map")
-            mapped = filtered.dropna(subset=["Latitude", "Longitude"]).copy()
+            mapped = map_events.dropna(subset=["Latitude", "Longitude"]).copy()
             mapped["Latitude"] = pd.to_numeric(mapped["Latitude"], errors="coerce")
             mapped["Longitude"] = pd.to_numeric(mapped["Longitude"], errors="coerce")
             mapped = mapped.dropna(subset=["Latitude", "Longitude"])
@@ -391,6 +409,7 @@ def render_live_disaster_intelligence() -> None:
             mapped = mapped[india_label].reset_index(drop=True)
             mapped["tooltip_event"] = mapped["Event"].fillna("Incident").astype(str).map(escape)
             mapped["tooltip_hazard"] = mapped["Hazard"].fillna("Other").astype(str).map(escape)
+            mapped["tooltip_priority"] = mapped["Priority"].fillna("Unrated").astype(str).map(escape)
             mapped["tooltip_description"] = (
                 mapped["Alert / magnitude"].fillna("No short description provided")
                 .astype(str).str.replace(r"\s+", " ", regex=True).str.slice(0, 180).map(escape)
@@ -483,7 +502,7 @@ def render_live_disaster_intelligence() -> None:
                 tooltip={
                     "html": "<div style='max-width:280px;line-height:1.45'>"
                     "<strong>{tooltip_event}</strong><br/>"
-                    "<b>Hazard:</b> {tooltip_hazard}<br/>"
+                    "<b>Priority:</b> {tooltip_priority} · <b>Hazard:</b> {tooltip_hazard}<br/>"
                     "<b>Location:</b> {tooltip_location}<br/>"
                     "{tooltip_description}</div>",
                     "style": {
@@ -519,6 +538,7 @@ def render_live_disaster_intelligence() -> None:
                     with st.container(border=True):
                         st.markdown("#### Selected incident details")
                         st.write("**Incident:**", selected_incident.get("Event", "Not provided"))
+                        st.write("**Priority:**", selected_incident.get("Priority", "Unrated"))
                         st.write("**Hazard:**", selected_incident.get("Hazard", "Other"))
                         lat = float(selected_incident.get("Latitude"))
                         lon = float(selected_incident.get("Longitude"))
@@ -537,18 +557,18 @@ def render_live_disaster_intelligence() -> None:
                         if record_url.startswith(("https://", "http://")):
                             st.link_button("Open source record", record_url)
             st.caption(
-                f"Map shows {len(mapped)} of {len(filtered)} incidents in the current event stream. "
+                f"Map shows the first {len(mapped)} of {len(filtered)} priority-ranked incidents in the event stream. "
                 "Government alerts without coordinates use an approximate state or India-level marker, labeled as approximate when selected. Only India-located records are shown in the event stream."
             )
     with list_col:
         with st.container(border=True):
             st.markdown(f"### Event stream · {len(filtered)}")
             if matching_count > len(filtered):
-                st.caption(f"Showing 10 mixed incidents of {matching_count} matching source events. Flood, drought, and landslide are prioritized when available.")
+                st.caption(f"Showing the 10 highest-priority of {matching_count} matching India source events. The map starts with the first 8.")
             if filtered.empty:
                 st.info("No events match the selected filters.")
             else:
-                display = filtered[["Hazard", "Event", "Area", "Alert / magnitude", "Event time (UTC)", "Source", "Record"]]
+                display = filtered[["Priority", "Hazard", "Event", "Area", "Alert / magnitude", "Event time (UTC)", "Source", "Record"]]
                 st.dataframe(
                     display, use_container_width=True, hide_index=True,
                     column_config={"Record": st.column_config.LinkColumn("Source record", display_text="Verify")},
