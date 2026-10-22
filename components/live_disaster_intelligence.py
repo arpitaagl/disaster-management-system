@@ -345,6 +345,10 @@ def render_live_disaster_intelligence() -> None:
                 | mapped["Source"].isin({"India Meteorological Department — public CAP", "NDMA SACHET / CAP"})
             )
             mapped = mapped[india_label].reset_index(drop=True)
+            mapped["tooltip_description"] = (
+                mapped["Alert / magnitude"].fillna("No short description provided")
+                .astype(str).str.replace(r"\s+", " ", regex=True).str.slice(0, 180)
+            )
             # Keep the marker palette consistent between the map and its legend.
             hazard_palette = [
                 ("Flood", "#ef4444", [239, 68, 68, 245], ("flood", "inundat")),
@@ -430,6 +434,9 @@ def render_live_disaster_intelligence() -> None:
                 layers=[india_glow_layer, india_bloom_layer, india_layer],
                 initial_view_state=india_view,
                 map_style="https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
+                tooltip={
+                    "text": "{Event}\nHazard: {Hazard}\n{tooltip_description}"
+                },
             )
             map_selection = st.pydeck_chart(
                 india_deck,
