@@ -153,6 +153,13 @@ selected_id = st.selectbox(
     format_func=lambda value: incident_labels[value],
 )
 incident = next((item for item in active_incidents if str(item.get("id")) == selected_id), {})
+saved_location_text = location_override.strip()
+location_override = st.text_input(
+    "Incident location for nearby-service search",
+    value=saved_location_text,
+    placeholder="e.g., Sector 80, Noida",
+    help="ResQ-AI searches this address first. For older reports, enter the location here because earlier versions did not save the typed address.",
+)
 
 assignment = center.assignment_for(selected_id)
 
