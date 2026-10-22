@@ -1352,7 +1352,8 @@ div[data-testid="stTextInput"]:has(input[placeholder*="Search"]) label {
     var(--resq-canvas) !important;
 }
 [data-testid="stMainBlockContainer"] {
-  padding-top: 1.15rem !important;
+  padding-top: 0 !important;
+  margin-top: -2.5rem !important;
 }
 .resq-header {
   border-radius: 20px !important;
