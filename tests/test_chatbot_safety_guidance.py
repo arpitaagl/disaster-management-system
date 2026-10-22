@@ -494,3 +494,57 @@ def test_phase2_live_operational_smoke_prompts_remain_deterministic(monkeypatch)
     dispatch = chatbot.answer_question("Can you send an ambulance?", center)
     assert "local emergency services" in dispatch
     assert "cannot call responders or dispatch resources" in dispatch
+
+
+def test_ambulance_availability_variations_do_not_trigger_dispatch_intent():
+    from components.chatbot import _is_emergency_dispatch_request
+
+    availability_questions = (
+        "Which ambulance resources are available?",
+        "Are any ambulances free?",
+        "What ambulance units are available right now?",
+        "Can you check ambulance availability?",
+        "Which paramedics are available?",
+    )
+    for question in availability_questions:
+        assert not _is_emergency_dispatch_request(question), question
+
+
+def test_ambulance_dispatch_variations_do_trigger_dispatch_intent():
+    from components.chatbot import _is_emergency_dispatch_request
+
+    dispatch_questions = (
+        "Can you send an ambulance?",
+        "Could you please get medical help here?",
+        "Can someone arrange paramedics?",
+        "I need an ambulance now",
+        "Please dispatch medical help",
+    )
+    for question in dispatch_questions:
+        assert _is_emergency_dispatch_request(question), question
+
+
+def test_ambulance_availability_fallback_never_claims_dispatch():
+    questions = (
+        "Which ambulance resources are available?",
+        "Are any ambulances free?",
+        "Can you check ambulance availability?",
+    )
+    for question in questions:
+        answer = _fallback(question, _empty_center())
+        assert "resources" in answer.casefold(), question
+        assert "local emergency services" not in answer.casefold(), question
+        assert "cannot call responders" not in answer.casefold(), question
+
+
+def test_dispatch_fallback_never_claims_an_ambulance_was_sent():
+    questions = (
+        "Can you send an ambulance?",
+        "Could you please get medical help here?",
+        "Can someone arrange paramedics?",
+    )
+    for question in questions:
+        answer = _fallback(question, _empty_center())
+        assert "local emergency services" in answer.casefold(), question
+        assert "cannot call responders" in answer.casefold(), question
+        assert "sent an ambulance" not in answer.casefold(), question
