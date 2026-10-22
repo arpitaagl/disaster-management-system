@@ -1542,19 +1542,29 @@ section[data-testid="stSidebar"] [data-testid="stSidebarNav"] a[aria-current="pa
 
 
 def inject_theme() -> None:
-    # Keep the selected theme in the URL so it survives a browser refresh
-    # and navigation between Streamlit pages. Session state alone is reset
-    # when the app is reloaded.
-    st.session_state["resq_theme"] = "Light"
-    try:
-        if "theme" in st.query_params:
-            del st.query_params["theme"]
-    except Exception:
-        pass
+    # Preserve the user's theme choice across Streamlit page reruns.
+    if "resq_theme" not in st.session_state:
+        st.session_state["resq_theme"] = "Light"
+
+    current_theme = st.session_state.get("resq_theme", "Light")
+    is_dark = st.session_state.get("resq_theme", "Light") == "Dark"
+    toggle_key = f"header_theme_toggle_{current_theme}"
+
+    # A compact toggle keeps the appearance control available without adding
+    # a duplicate selector to the sidebar or Settings page.
+    selected_dark = st.toggle(
+        "Dark mode",
+        value=is_dark,
+        key=toggle_key,
+        help="Switch between light and dark appearance.",
+    )
+    st.session_state["resq_theme"] = "Dark" if selected_dark else "Light"
 
     st.markdown(CSS, unsafe_allow_html=True)
     st.markdown(ENHANCED_CSS, unsafe_allow_html=True)
     st.markdown(POLISH_CSS, unsafe_allow_html=True)
+    if st.session_state.get("resq_theme", "Light") == "Dark":
+        st.markdown(DARK_CSS, unsafe_allow_html=True)
 
 
 def page_setup(title: str) -> None:
