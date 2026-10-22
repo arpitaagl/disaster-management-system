@@ -335,6 +335,14 @@ def render_live_disaster_intelligence() -> None:
                 return hazard_palette[-1][2]
 
             mapped["Marker color"] = mapped.apply(marker_color, axis=1)
+            # Ensure the two visible incident markers are clearly distinct on the map.
+            # Use north/south position for the requested upper-cyan, lower-red treatment.
+            north_index = mapped["Latitude"].idxmax() if not mapped.empty else None
+            south_index = mapped["Latitude"].idxmin() if not mapped.empty else None
+            if north_index is not None:
+                mapped.at[north_index, "Marker color"] = [6, 182, 212, 245]
+            if south_index is not None:
+                mapped.at[south_index, "Marker color"] = [239, 68, 68, 245]
             mapped["Glow color"] = mapped["Marker color"].map(
                 lambda color: [color[0], color[1], color[2], 62]
             )
@@ -353,9 +361,9 @@ def render_live_disaster_intelligence() -> None:
                 data=mapped,
                 get_position="[Longitude, Latitude]",
                 get_fill_color="Glow color",
-                get_radius=105000,
-                radius_min_pixels=13,
-                radius_max_pixels=28,
+                get_radius=60000,
+                radius_min_pixels=6,
+                radius_max_pixels=14,
                 stroked=False,
                 pickable=False,
             )
@@ -366,9 +374,9 @@ def render_live_disaster_intelligence() -> None:
                 get_position="[Longitude, Latitude]",
                 get_fill_color="Marker color",
                 get_line_color=[255, 255, 255, 255],
-                get_radius=50000,
-                radius_min_pixels=8,
-                radius_max_pixels=18,
+                get_radius=28000,
+                radius_min_pixels=4,
+                radius_max_pixels=10,
                 line_width_min_pixels=2,
                 pickable=True,
                 auto_highlight=True,
