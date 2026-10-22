@@ -13,6 +13,10 @@ CSS = """
 <style>
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap');
 
+.resq-header-ai-icon { position: fixed; left: 1rem; bottom: 1rem; z-index: 1000002; display: block; width: 74px; height: 74px; border-radius: 50%; overflow: hidden; box-shadow: 0 8px 22px rgba(15,23,42,.32); }
+.resq-header-ai-icon img { width: 100%; height: 100%; border-radius: 50%; display: block; }
+.resq-chat-overlay { display: none; }
+
 :root {
   color-scheme: light;
   --resq-ink: #152238;
@@ -134,7 +138,7 @@ button[aria-label*="Expand sidebar"]:hover {
   padding-top: 0 !important;
 }
 [data-testid="stMainBlockContainer"] {
-  padding-top: 1.8rem;
+  padding-top: .55rem;
   padding-bottom: 3rem;
   max-width: 1600px;
 }
@@ -173,17 +177,6 @@ small, .stCaption, [data-testid="stCaptionContainer"] {
 }
 a { color: var(--resq-blue) !important; }
 
-/* Theme toggle sits in the top-right above the main command-center header. */
-div[data-testid="stHorizontalBlock"]:has(button[kind="secondary"]) {
-  align-items: center;
-}
-button[kind="secondary"] {
-  border-radius: 10px !important;
-  border: 1px solid var(--resq-border) !important;
-  font-size: 12px !important;
-  font-weight: 650 !important;
-  min-height: 38px;
-}
 button[kind="secondary"]:hover {
   border-color: var(--resq-blue) !important;
 }
@@ -1552,25 +1545,16 @@ def inject_theme() -> None:
     # Keep the selected theme in the URL so it survives a browser refresh
     # and navigation between Streamlit pages. Session state alone is reset
     # when the app is reloaded.
+    st.session_state["resq_theme"] = "Light"
     try:
-        requested_theme = str(st.query_params.get("theme", "")).strip().lower()
+        if "theme" in st.query_params:
+            del st.query_params["theme"]
     except Exception:
-        requested_theme = ""
-
-    if requested_theme in {"light", "dark"}:
-        st.session_state["resq_theme"] = requested_theme.title()
-    elif "resq_theme" not in st.session_state:
-        # Never infer the app theme from Streamlit/browser appearance: that
-        # can override a user's Light selection after a browser refresh.
-        # Light is the stable default; Dark is used only when explicitly saved
-        # in the URL by the app's own theme toggle.
-        st.session_state["resq_theme"] = "Light"
+        pass
 
     st.markdown(CSS, unsafe_allow_html=True)
     st.markdown(ENHANCED_CSS, unsafe_allow_html=True)
     st.markdown(POLISH_CSS, unsafe_allow_html=True)
-    if st.session_state.get("resq_theme", "Light") == "Dark":
-        st.markdown(DARK_CSS, unsafe_allow_html=True)
 
 
 def page_setup(title: str) -> None:
@@ -1623,27 +1607,42 @@ def render_sidebar(center: CommandCenter) -> None:
 
 def render_header(center: CommandCenter, subtitle: str) -> None:
     ai_class = "ok" if "Active" in center.ai_mode else "warn"
-    current_theme = st.session_state.get("resq_theme", "Light")
-    spacer, assistant_slot, theme_slot = st.columns([0.88, 0.08, 0.06], vertical_alignment="center")
-    with assistant_slot:
-        if st.button(
-            "🆘 ResQ-AI",
-            key="header_resq_ai_home",
-            help="Open the ResQ-AI assistant",
-            use_container_width=True,
-        ):
-            st.switch_page("pages/6_ResQ_Assistant.py")
-    with theme_slot:
-        if st.button(
-            "☀" if current_theme == "Dark" else "☾",
-            key=f"header_theme_toggle_{current_theme}",
-            help="Switch to light mode" if current_theme == "Dark" else "Switch to dark mode",
-            use_container_width=True,
-        ):
-            st.session_state["resq_theme"] = "Light" if current_theme == "Dark" else "Dark"
-            # Persist the choice across refreshes and page navigation.
-            st.query_params["theme"] = st.session_state["resq_theme"].lower()
-            st.rerun()
+    import base64
+    from pathlib import Path
+
+    icon_path = Path(__file__).resolve().parents[1] / "assets" / "resq-chatbot-icon.png"
+    icon_src = "data:image/png;base64," + base64.b64encode(icon_path.read_bytes()).decode("ascii")
+    if st.button("Open ResQ Assistant chat", key="resq_chat_launcher", help="Open ResQ Assistant chat"):
+        st.session_state["resq_chat_open"] = not st.session_state.get("resq_chat_open", False)
+    st.markdown(
+        f"""
+        <style>
+        div[data-testid="stButton"]:has(button[kind="secondary"][aria-label="Open ResQ Assistant chat"]) {{
+          position: fixed; left: 1rem; bottom: 1rem; z-index: 1000002;
+        }}
+        div[data-testid="stButton"]:has(button[kind="secondary"][aria-label="Open ResQ Assistant chat"]) button {{
+          width: 74px; height: 74px; border-radius: 50%; border: 0; background: #399ed8;
+          box-shadow: 0 8px 22px rgba(15,23,42,.32); color: transparent; font-size: 0;
+          background-image: url('{icon_src}'); background-size: cover; background-position: center;
+        }}
+        div[data-testid="stButton"]:has(button[aria-label="Open ResQ Assistant chat"]) {{
+          position: fixed !important; left: 1rem !important; bottom: 1rem !important; z-index: 1000002 !important;
+          width: 74px !important; height: 74px !important;
+        }}
+        div[data-testid="stButton"]:has(button[aria-label="Open ResQ Assistant chat"]) button {{
+          width: 74px !important; height: 74px !important; border-radius: 50% !important; border: 0 !important;
+          color: transparent !important; font-size: 0 !important; padding: 0 !important;
+          background: #399ed8 url('{icon_src}') center / cover no-repeat !important;
+          box-shadow: 0 8px 22px rgba(15,23,42,.32) !important;
+        }}
+        .resq-chat-overlay {{ display: {'block' if st.session_state.get('resq_chat_open') else 'none'}; position: fixed; z-index: 1000001; left: 1rem; bottom: 6.2rem; width: min(410px, calc(100vw - 2rem)); max-height: 72vh; overflow-y: auto; background: white; border: 1px solid #dbe4ee; border-radius: 16px; padding: 16px; box-shadow: 0 16px 48px rgba(15,23,42,.24); }}
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+    if st.session_state.get("resq_chat_open"):
+        from components.chatbot import render_chatbot
+        render_chatbot(center)
     st.markdown(
         f"""
         <div class="resq-header">

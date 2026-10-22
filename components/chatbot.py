@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import re
+from pathlib import Path
 from difflib import SequenceMatcher
 from typing import Any
 
@@ -244,11 +245,10 @@ def _app_help(question: str) -> str | None:
             "Open **Situation Reports** in the sidebar to review the report-generation options available in this version. "
             "Review the report for completeness and remember that prototype records may be simulated or incomplete before sharing it as an operational update."
         )
-    if _has_phrase(q, ("dark mode", "change theme", "light mode", "appearance", "theme setting")):
+    if _has_phrase(q, ("change theme", "light mode", "appearance", "theme setting")):
         return (
-            "**Changing the app theme**\n\n"
-            "Use the theme toggle in the app sidebar to switch between the available light and dark appearances. "
-            "If the appearance does not update, refresh the page and check the toggle again."
+            "**App appearance**\n\n"
+            "This app uses a fixed light appearance."
         )
     if _has_phrase(q, ("upload an image", "attach a photo", "incident photo", "image upload", "photo evidence")):
         return (
@@ -499,6 +499,7 @@ def render_chatbot(center: CommandCenter) -> None:
     st.caption("AI provider configured · grounded in the current snapshot" if llm_configured() else "Offline fallback active · no API key required for built-in question patterns")
 
     history: list[dict[str, str]] = st.session_state.setdefault("resq_chat_messages", [])
+    assistant_icon = str(Path(__file__).resolve().parents[1] / "assets" / "resq-chatbot-icon.png")
     prompt = None
 
     voice_result = voice_assistant(
@@ -512,7 +513,7 @@ def render_chatbot(center: CommandCenter) -> None:
             prompt = str(voice_result["text"]).strip()
 
     for item in history:
-        avatar = "🤖" if item["role"] == "assistant" else None
+        avatar = assistant_icon if item["role"] == "assistant" else None
         with st.chat_message(item["role"], avatar=avatar):
             st.markdown(item["content"])
 
@@ -541,7 +542,7 @@ def render_chatbot(center: CommandCenter) -> None:
         history.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
-        with st.chat_message("assistant", avatar="🤖"):
+        with st.chat_message("assistant", avatar=assistant_icon):
             with st.spinner("Checking the current response snapshot…"):
                 response = answer_question(prompt, center, prior)
             st.markdown(response)
