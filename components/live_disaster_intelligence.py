@@ -238,6 +238,21 @@ def render_live_disaster_intelligence() -> None:
         })
 
     events = [event for event in events if _is_india_incident(event)]
+    india_only_sources = {
+        "India Meteorological Department — public CAP", "NDMA SACHET / CAP"
+    }
+    for marker_index, event in enumerate(events):
+        approximate = event.get("Source") in india_only_sources
+        try:
+            latitude, longitude = float(event.get("Latitude")), float(event.get("Longitude"))
+        except (TypeError, ValueError):
+            latitude, longitude = None, None
+        if latitude is None or longitude is None:
+            latitude, longitude = _india_marker_coordinates(str(event.get("Area") or ""), marker_index)
+            approximate = True
+        event["Latitude"] = latitude
+        event["Longitude"] = longitude
+        event["Location approximate"] = approximate
     india_counts = Counter(event["Source"] for event in events)
     india_health_rows = []
     for source_row in source_rows:
@@ -350,6 +365,7 @@ def render_live_disaster_intelligence() -> None:
                 .astype(str).str.replace(r"\s+", " ", regex=True).str.slice(0, 180)
             )
             mapped["tooltip_location"] = mapped["Area"].fillna("Location not provided").astype(str)
+            mapped.loc[mapped["Location approximate"], "tooltip_location"] += " (approximate marker)"
             mapped["tooltip_time"] = mapped["Event time (UTC)"].fillna("Time not provided").astype(str)
             mapped["tooltip_source"] = mapped["Source"].fillna("Source not provided").astype(str)
             # Keep the marker palette consistent between the map and its legend.
@@ -460,14 +476,12 @@ def render_live_disaster_intelligence() -> None:
                         st.write("**Incident:**", selected_incident.get("Event", "Not provided"))
                         lat = float(selected_incident.get("Latitude"))
                         lon = float(selected_incident.get("Longitude"))
-                        approximate = selected_incident.get("Source") in {
-                            "India Meteorological Department — public CAP", "NDMA SACHET / CAP"
-                        }
+                        approximate = bool(selected_incident.get("Location approximate", False))
                         location_text = str(selected_incident.get("Area") or "India")
                         precision_note = " · approximate marker; feed did not provide precise coordinates" if approximate else ""
                         st.write("**Location:**", f"{location_text} ({lat:.3f}, {lon:.3f}){precision_note}")
             st.caption(
-                f"{len(mapped)} filtered source events explicitly labeled India and inside India's approximate bounds. "
+                f"Map shows {len(mapped)} of {len(filtered)} incidents in the current event stream. "
                 "Government alerts without coordinates use an approximate state or India-level marker, labeled as approximate when selected. Only India-located records are shown in the event stream."
             )
     with list_col:
