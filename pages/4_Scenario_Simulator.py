@@ -61,57 +61,83 @@ def _distance_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 
 @st.cache_data(ttl=300, show_spinner=False)
 def _nearby_public_services(lat: float, lon: float, radius_m: int = 25000) -> list[dict]:
-    """Fast, bounded lookup; cache both results and temporary directory outages."""
+    """Find mapped emergency facilities, retrying public Overpass mirrors on outages."""
     query = f"""
-    [out:json][timeout:8];
+    [out:json][timeout:7];
     (
       nwr(around:{radius_m},{lat},{lon})[amenity~"^(police|fire_station)$"];
-      nwr(around:{radius_m},{lat},{lon})[emergency~"^(ambulance_station|fire_station|ambulance_centre|rescue_station)$"];
+      nwr(around:{radius_m},{lat},{lon})[emergency~"^(ambulance_station|fire_station|ambulance_centre|rescue_station|rescue_service|ambulance_rendezvous_point)$"];
       nwr(around:{radius_m},{lat},{lon})[healthcare~"^(ambulance_station|emergency_unit)$"];
-      nwr(around:{radius_m},{lat},{lon})[emergency="ambulance"][name];
+      nwr(around:{radius_m},{lat},{lon})[emergency="ambulance"];
+      nwr(around:{radius_m},{lat},{lon})[amenity="hospital"][emergency];
     );
     out center tags;
     """
     headers = {"User-Agent": "ResQ-AI public emergency service directory/1.0 (disaster response prototype)"}
-    # One bounded request only. Public directory outages must not block the page
-    # with a chain of mirror retries and multiple Nominatim queries.
-    try:
-        response = requests.post(
-            "https://overpass-api.de/api/interpreter",
-            data={"data": query},
-            headers=headers,
-            timeout=(2, 6),
-        )
-        response.raise_for_status()
-        payload = response.json()
-        if not isinstance(payload, dict) or not isinstance(payload.get("elements"), list):
-            return []
-    except (requests.RequestException, ValueError, TypeError):
-        # Returning an empty list lets Streamlit cache the outage for 5 minutes,
-        # avoiding a new slow request on every rerun. No services are fabricated.
+    payload = None
+    # Overpass is a volunteer-run public service. Try several public mirrors so
+    # one busy/unavailable endpoint does not make the whole section empty.
+    endpoints = (
+        "https://overpass-api.de/api/interpreter",
+        "https://overpass.kumi.systems/api/interpreter",
+        "https://overpass.nchc.org.tw/api/interpreter",
+    )
+    for endpoint in endpoints:
+        try:
+            response = requests.post(
+                endpoint, data={"data": query}, headers=headers, timeout=(2, 5)
+            )
+            response.raise_for_status()
+            candidate = response.json()
+            if isinstance(candidate, dict) and isinstance(candidate.get("elements"), list):
+                payload = candidate
+                break
+        except (requests.RequestException, ValueError, TypeError):
+            continue
+    if payload is None:
         return []
 
     labels = {
-        "police": "Police station", "fire_station": "Fire station",
-        "ambulance_station": "Ambulance station", "ambulance_centre": "Ambulance centre",
-        "rescue_station": "Rescue station", "emergency_unit": "Emergency unit",
+        "police": "Police station",
+        "fire_station": "Fire station",
+        "ambulance_station": "Ambulance station",
+        "ambulance_centre": "Ambulance centre",
+        "rescue_station": "Rescue station",
+        "rescue_service": "Rescue service",
+        "ambulance_rendezvous_point": "Ambulance point",
+        "emergency_unit": "Emergency unit",
         "ambulance": "Ambulance service",
     }
     results = []
     seen = set()
     for item in payload.get("elements", []):
         tags = item.get("tags") or {}
-        name = str(tags.get("name") or tags.get("official_name") or "").strip()
-        if not name:
-            continue
         coords = item if item.get("lat") is not None else (item.get("center") or {})
         if coords.get("lat") is None or coords.get("lon") is None:
             continue
-        kind = str(tags.get("amenity") or tags.get("emergency") or tags.get("healthcare") or "emergency service")
+
+        # Keep the specific emergency tag instead of accidentally labelling a
+        # facility from an unrelated tag; support both named and unnamed mapped sites.
+        kind = next(
+            (str(tags.get(key) or "") for key in ("amenity", "emergency", "healthcare")
+             if str(tags.get(key) or "") in labels),
+            "",
+        )
+        if not kind:
+            continue
+        service_type = labels[kind]
+        element_type = str(item.get("type") or "node")
+        element_id = item.get("id")
+        name = str(tags.get("name") or tags.get("official_name") or tags.get("operator") or "").strip()
+        if not name:
+            name = f"Unnamed {service_type.lower()} (OSM {element_id})"
+        try:
+            service_lat, service_lon = float(coords["lat"]), float(coords["lon"])
+            distance = _distance_km(lat, lon, service_lat, service_lon)
+        except (TypeError, ValueError):
+            continue
         phone = str(tags.get("contact:phone") or tags.get("phone") or tags.get("contact:mobile") or "").strip()
-        distance = _distance_km(lat, lon, float(coords["lat"]), float(coords["lon"]))
-        service_type = labels.get(kind, kind.replace("_", " ").title())
-        key = (name.casefold(), service_type)
+        key = (element_type, str(element_id or ""), service_type)
         if key in seen:
             continue
         seen.add(key)
@@ -124,8 +150,6 @@ def _nearby_public_services(lat: float, lon: float, radius_m: int = 25000) -> li
             str(tags.get("addr:postcode") or "").strip(),
         ]
         address = ", ".join(part for part in address_parts if part)
-        element_type = str(item.get("type") or "node")
-        element_id = item.get("id")
         source_url = f"https://www.openstreetmap.org/{element_type}/{element_id}" if element_id else "https://www.openstreetmap.org/"
         results.append({
             "name": name,
@@ -136,11 +160,10 @@ def _nearby_public_services(lat: float, lon: float, radius_m: int = 25000) -> li
             "website": str(tags.get("contact:website") or tags.get("website") or "").strip(),
             "source": "OpenStreetMap public directory",
             "source_url": source_url,
-            "lat": float(coords["lat"]),
-            "lon": float(coords["lon"]),
+            "lat": service_lat,
+            "lon": service_lon,
         })
     return sorted(results, key=lambda row: row["distance_km"])[:100]
-
 
 active_incidents = [
     incident for incident in center.incidents
@@ -280,7 +303,7 @@ st.caption(
 )
 response_station_types = {
     "Fire station", "Police station", "Ambulance station", "Ambulance centre",
-    "Rescue station", "Ambulance service", "Emergency unit",
+    "Rescue station", "Rescue service", "Ambulance point", "Ambulance service", "Emergency unit",
 }
 response_stations = [
     service for service in (nearby_services if lat is not None and lon is not None and "nearby_services" in locals() else [])
@@ -314,9 +337,10 @@ if response_stations:
         "equipped, available, or dispatched."
     )
 else:
-    st.info(
-        "No nearby emergency-service listings were returned by the public directory for this location. "
-        "This does not prove that no services exist. The live lookup does not provide a verified rescue-team roster."
+    st.warning(
+        "The public emergency directory returned no matching listings for these coordinates. "
+        "This can happen when OpenStreetMap has incomplete local coverage or all lookup mirrors are busy. "
+        "Use the map/source search or contact local emergency authorities directly; this is not proof that services are absent."
     )
 
 verified_resources = [
