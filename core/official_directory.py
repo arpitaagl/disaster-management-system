@@ -99,10 +99,12 @@ def nearby_public_hospitals(lat: Any, lon: Any, limit: int = 10) -> tuple[list[d
 
 
 def nearby_major_hospitals(lat: Any, lon: Any, limit: int = 5) -> tuple[list[dict[str, Any]], str | None]:
-    """Return named hospital-level facilities with a directory-listed phone number.
+    """Return the nearest named hospital-level facilities, including records without phones.
 
-    The source is a public reference directory, not an official live contact registry.
-    A listed number must never be described as independently verified by ResQ-AI.
+    Nearby hospitals must not be hidden just because the reference directory lacks a
+    phone number. Results are distance-sorted; facilities within 2 km naturally appear
+    first, with farther facilities used as fallback when fewer results are available.
+    The source is a public reference directory, not a live contact or availability feed.
     """
     records, error = nearby_public_hospitals(lat, lon, limit=1000)
     if error:
@@ -125,11 +127,11 @@ def nearby_major_hospitals(lat: Any, lon: Any, limit: int = 5) -> tuple[list[dic
         phone = str(record.get("phone") or "").strip()
         facility_type = str(record.get("facility_type") or "").strip()
         name_key, type_key = name.casefold(), facility_type.casefold()
-        if not name or not phone or any(term in type_key for term in excluded):
+        if not name or any(term in type_key for term in excluded):
             continue
         if not (any(term in type_key for term in major_terms) or any(term in name_key for term in major_terms)):
             continue
-        key = (name_key, phone)
+        key = (name_key, str(record.get("address") or "").casefold())
         if key in seen:
             continue
         seen.add(key)
