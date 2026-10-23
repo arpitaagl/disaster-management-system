@@ -433,14 +433,6 @@ if is_unclassified:
         "Review or resubmit the report with the hazard and location clearly described."
     )
 
-st.markdown("### General response guidance")
-action = str(incident.get("recommended_action") or "").strip()
-if action:
-    st.info(action.replace("Recommended action:", "Suggested guidance:", 1))
-    st.caption("Guidance only — this does not confirm a dispatch or verify on-scene conditions.")
-else:
-    st.info("No response guidance has been generated for this report yet.")
-
 if assignment and assignment.get("reason"):
     st.caption(str(assignment["reason"]))
 
@@ -459,11 +451,7 @@ for col, (label, count) in zip(cols, counts.items()):
     col.metric(label, count)
 
 if not verified_resources:
-    st.error(
-        "Resource allocation unavailable: no verified rescue-team inventory is connected. "
-        "No team name, distance, ambulance, or medication availability can be recommended until "
-        "real resource records or a trusted live feed is configured."
-    )
+    pass
 elif not assignment or not assignment.get("resource_id"):
     st.warning(
         "No eligible nearby resource has been assigned from the currently loaded records. "
