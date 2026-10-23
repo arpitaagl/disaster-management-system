@@ -450,7 +450,7 @@ cols = st.columns(len(counts))
 for col, (label, count) in zip(cols, counts.items()):
     col.metric(label, count)
 
-if not verified_resources:
+if not center.resources:
     pass
 elif not assignment or not assignment.get("resource_id"):
     st.warning(
