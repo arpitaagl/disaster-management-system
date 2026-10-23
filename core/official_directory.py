@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import math
+from io import StringIO
 from typing import Any
 
 import requests
@@ -198,8 +199,8 @@ def _fetch_official_ndrf_units() -> tuple[list[dict[str, Any]], str | None]:
             timeout=(4, 12),
         )
         response.raise_for_status()
-        tables = pd.read_html(response.text)
-    except (requests.RequestException, ValueError, ImportError) as exc:
+        tables = pd.read_html(StringIO(response.text))
+    except (requests.RequestException, ValueError, ImportError, OSError) as exc:
         return [], f"Official NDRF directory is temporarily unavailable ({type(exc).__name__})."
 
     records: list[dict[str, Any]] = []
