@@ -138,6 +138,11 @@ def _deterministic_brief(center: Any) -> str:
         f"People affected: {metrics.get('people_affected', 0)}; available resources: {metrics.get('available_resources', 0)}.",
         f"Hospital beds reported available: {metrics.get('hospital_beds_available', 0)}; shelter spaces reported available: {metrics.get('shelter_spaces_available', 0)}.",
     ]
+    if not incidents and not any((center.resources, center.hospitals, center.shelters)):
+        lines.append(
+            "No incident or operational records are loaded in this session. These zero counts do not mean there is no emergency. "
+            "Report an incident or load the demo scenario to create a useful briefing."
+        )
     for row in incidents[:3]:
         lines.append(f"- {row.get('id')}: {row.get('disaster_type')} | score {row.get('priority_score', 0)}/100 | {row.get('people_affected', 0)} people affected | {row.get('recommended_action', 'Review with coordinator')}")
     lines.append("Coordinator action: verify reports and capacities, then make all operational decisions. Scores and allocations are recommendations, not dispatch authorization.")

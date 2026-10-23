@@ -85,7 +85,12 @@ if brief_result:
         st.success(f"Generated with Amazon Bedrock · {brief_result['region']} · {brief_result['model_id']}")
         st.info(brief_result["note"])
     else:
-        st.warning("Showing deterministic fallback. No successful Bedrock call was made.")
+        st.warning("Amazon Bedrock is not connected. This is a basic rules-based summary, not an AI-generated briefing.")
+        st.caption(
+            "To connect it: open the app's Streamlit Community Cloud settings → Secrets, then add "
+            "AWS_BEDROCK_MODEL_ID and AWS_REGION. Add AWS credentials there as private secrets "
+            "(or configure an IAM role) with permission to invoke that Bedrock model. Never paste credentials into chat or GitHub."
+        )
         st.caption(brief_result.get("aws_note", ""))
     st.text(brief_result["brief"])
     st.caption("Verify all reports, capacities, and recommendations with the responsible coordinator.")
