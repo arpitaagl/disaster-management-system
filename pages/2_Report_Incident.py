@@ -11,7 +11,6 @@ from components.theme import page_setup, render_header, render_sidebar
 from core.config import CITY_LAT, CITY_LON
 from core.persistence import is_configured, save_incident
 from utils.validation import validate_report
-from core.official_directory import nearby_major_hospitals
 
 def _geocode_location(address: str) -> tuple[float, float] | None:
     """Convert a user-entered address into latitude/longitude."""
@@ -227,57 +226,6 @@ if submitted:
         fact_cols[1].metric("Access", str(analysis.get("accessibility") or accessibility))
         fact_cols[2].metric("Vulnerable people", f"{incident.get('vulnerable_population') or 0:,}")
 
-        if assignment:
-            st.markdown("### Resource and destination recommendation")
-            rec_cols = st.columns(3)
-            rec_cols[0].metric(
-                "Recommended resource",
-                str(assignment.get("resource_id") or "Unassigned"),
-                help=str(assignment.get("resource_name") or ""),
-            )
-            rec_cols[1].metric("Hospital", str(assignment.get("hospital_id") or "None"))
-            rec_cols[2].metric("Shelter", str(assignment.get("shelter_id") or "None"))
-            if assignment.get("distance_km") is not None:
-                st.caption(
-                    f"Prototype distance: {assignment['distance_km']} km. "
-                    f"{assignment.get('reason') or ''}"
-                )
-            st.caption("A coordinator must verify the recommendation before operational use.")
-        else:
-            st.warning("No resource assignment is currently available. A coordinator should review the incident.")
-
-        st.markdown("### Major nearby hospitals with listed contacts")
-        st.caption("Major hospital records with a phone number listed in the public reference directory · nearest first. Numbers have not been independently phone-verified; live emergency capability and bed availability are unknown.")
-        with st.spinner("Searching the public hospital directory near this incident…"):
-            nearby_hospitals, hospital_lookup_error = nearby_major_hospitals(lat, lon, limit=5)
-
-        if hospital_lookup_error:
-            st.warning(f"{hospital_lookup_error} Please retry shortly. No hospital names or phone numbers have been fabricated.")
-        elif not nearby_hospitals:
-            st.info("No hospital records were returned near this location by the public directory. This does not prove that no hospitals exist nearby.")
-        else:
-            st.caption(f"Showing up to five major hospitals with listed contact numbers; fewer are shown if records do not meet the filters.")
-            for hospital in nearby_hospitals:
-                with st.container(border=True):
-                    st.markdown(f"**{hospital.get('name')}**")
-                    st.caption(
-                        f"{hospital.get('facility_type') or 'Health facility'} · "
-                        f"{hospital.get('distance_km', '—')} km away (straight-line)"
-                    )
-                    address = hospital.get("address") or ""
-                    district = hospital.get("district") or ""
-                    state = hospital.get("state") or ""
-                    location_label = ", ".join(part for part in [address, district, state] if part)
-                    st.write(location_label or "Address not listed in the public directory.")
-                    phone = str(hospital.get("phone") or "").strip()
-                    if phone:
-                        st.write(f"**Listed contact:** {phone}")
-                        if any(ch.isdigit() for ch in phone):
-                            st.link_button("Call hospital", f"tel:{phone}", use_container_width=False)
-                    else:
-                        st.caption("Phone number not listed in the public directory.")
-                    st.caption("Source: India hospital reference directory. Listed contact only; not independently verified by ResQ-AI. Call to confirm.")
-                    st.markdown("[Open source directory](https://livingatlas.esri.in/server/rest/services/LivingAtlas/IND_Hospital_Directory/MapServer/0)")
 
         with st.expander("View extracted structured data (JSON)", expanded=False):
             st.caption("Technical view for debugging and review. This is data, not executable code.")
