@@ -34,7 +34,7 @@ def _query_hospitals(lat: float, lon: float) -> list[dict[str, Any]]:
         "outFields": "objectid,health_facility_name,address,locality,posatalcode,landline_number,facility_type,state_name,district_name,lat,lon",
         "returnGeometry": "false",
         "outSR": "4326",
-        "resultRecordCount": 100,
+        "resultRecordCount": 1000,
         "orderByFields": "health_facility_name",
     }
     response = requests.get(HOSPITAL_LAYER_QUERY, params=params, timeout=12)
