@@ -13,3 +13,4 @@ psycopg2-binary>=2.9.9
 deep-translator>=1.11.4
 reportlab>=4.2.0
 PyJWT[crypto]>=2.8.0
+lxml>=5.0
