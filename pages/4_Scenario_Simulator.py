@@ -499,7 +499,12 @@ cols = st.columns(len(counts))
 for col, (label, count) in zip(cols, counts.items()):
     col.metric(label, count)
 
-if not center.resources:
+if not center.resources and resource_rows and all(row.get("is_demo") for row in resource_rows):
+    st.info(
+        "Demo teams are for UI demonstration only and are not part of the allocation engine. "
+        "Real resource allocation remains unavailable until verified inventory or a trusted live feed is configured."
+    )
+elif not center.resources:
     st.error(
         "Resource allocation unavailable: no verified rescue-team inventory is connected. "
         "No team name, distance, ambulance, or medication availability can be recommended until "
