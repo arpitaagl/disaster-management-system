@@ -193,66 +193,6 @@ if is_unclassified:
 if assignment and assignment.get("reason"):
     st.caption(str(assignment["reason"]))
 
-st.markdown("### Resource readiness")
-st.caption(
-    "Incident assessment and resource availability are separate. Public facility listings do not show live bed capacity or confirm dispatch readiness."
-)
-
-hospital_directory_count = len(major_hospitals) if lat is not None and lon is not None and "major_hospitals" in locals() else 0
-readiness_cols = st.columns(3)
-readiness_cols[0].metric("Active reported incidents", len(active_incidents))
-readiness_cols[1].metric("Nearby hospital listings", hospital_directory_count)
-readiness_cols[2].metric(
-    "Operational resource inventory",
-    "Connected" if center.resources else "Not connected",
-)
-if center.shelters:
-    st.metric("Verified shelter records", len(center.shelters))
-else:
-    st.info("Shelter inventory is not connected. No verified shelter records are available to count.")
-
-if not center.resources:
-    st.info(
-        "Operational resource inventory is not connected. Public hospital directory listings are shown above, "
-        "but they do not confirm rescue-team availability, dispatch readiness, or live bed capacity."
-    )
-elif not assignment or not assignment.get("resource_id"):
-    st.warning(
-        "No eligible nearby resource has been assigned from the currently loaded records. "
-        "Check verified resource coordinates, capabilities, capacity, and current availability."
-    )
-else:
-    resource_id = assignment.get("resource_id")
-    resource_name = assignment.get("resource_name")
-    distance = assignment.get("distance_km")
-    if resource_id and resource_name and isinstance(distance, (int, float)):
-        st.success(f"Candidate resource: {resource_name} ({resource_id}) · {distance:.2f} km")
-        st.caption("This is a decision-support candidate, not a confirmed dispatch.")
-
-if assignment and (assignment.get("hospital_name") or assignment.get("hospital_id")):
-    hospital_name = str(assignment.get("hospital_name") or assignment.get("hospital_id"))
-    hospital_distance = assignment.get("hospital_km")
-    if assignment.get("hospital_availability") == "capacity-reported":
-        st.success(
-            f"Hospital candidate with operator-reported capacity: {hospital_name}"
-            + (f" · {hospital_distance:.2f} km" if isinstance(hospital_distance, (int, float)) else "")
-        )
-        st.caption("Capacity is operator-reported and must be confirmed by the hospital before transfer.")
-    else:
-        st.info(
-            f"Nearby hospital directory lead: {hospital_name}"
-            + (f" · {hospital_distance:.2f} km" if isinstance(hospital_distance, (int, float)) else "")
-        )
-        st.warning(
-            "This is a public facility-directory match, not a verified available bed or dispatch destination. "
-            "Call the facility to confirm emergency capability and current capacity."
-        )
-if center.shelters and assignment and (assignment.get("shelter_name") or assignment.get("shelter_id")):
-    st.write("**Shelter candidate:** " + str(assignment.get("shelter_name") or assignment.get("shelter_id")))
-elif not center.shelters:
-    st.caption("No verified shelter inventory is connected.")
-
-
 # What-if simulations operate on a copy of the current state. They never overwrite
 # submitted reports or persist simulated changes to the operational inventory.
 from core.state import CommandCenter
