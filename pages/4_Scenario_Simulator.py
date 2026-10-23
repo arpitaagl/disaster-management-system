@@ -65,8 +65,10 @@ def _nearby_public_services(lat: float, lon: float, radius_m: int = 25000) -> li
     query = f"""
     [out:json][timeout:8];
     (
-      nwr(around:{radius_m},{lat},{lon})[amenity~"^(hospital|clinic|doctors|police|fire_station)$"];
+      nwr(around:{radius_m},{lat},{lon})[amenity~"^(police|fire_station)$"];
       nwr(around:{radius_m},{lat},{lon})[emergency~"^(ambulance_station|fire_station|ambulance_centre|rescue_station)$"];
+      nwr(around:{radius_m},{lat},{lon})[healthcare~"^(ambulance_station|emergency_unit)$"];
+      nwr(around:{radius_m},{lat},{lon})[emergency="ambulance"][name];
     );
     out center tags;
     """
@@ -90,10 +92,10 @@ def _nearby_public_services(lat: float, lon: float, radius_m: int = 25000) -> li
         return []
 
     labels = {
-        "hospital": "Hospital", "clinic": "Clinic", "doctors": "Medical clinic",
         "police": "Police station", "fire_station": "Fire station",
         "ambulance_station": "Ambulance station", "ambulance_centre": "Ambulance centre",
-        "rescue_station": "Rescue station", "ambulance": "Ambulance service",
+        "rescue_station": "Rescue station", "emergency_unit": "Emergency unit",
+        "ambulance": "Ambulance service",
     }
     results = []
     seen = set()
@@ -105,7 +107,7 @@ def _nearby_public_services(lat: float, lon: float, radius_m: int = 25000) -> li
         coords = item if item.get("lat") is not None else (item.get("center") or {})
         if coords.get("lat") is None or coords.get("lon") is None:
             continue
-        kind = str(tags.get("amenity") or tags.get("emergency") or "emergency service")
+        kind = str(tags.get("amenity") or tags.get("emergency") or tags.get("healthcare") or "emergency service")
         phone = str(tags.get("contact:phone") or tags.get("phone") or tags.get("contact:mobile") or "").strip()
         distance = _distance_km(lat, lon, float(coords["lat"]), float(coords["lon"]))
         service_type = labels.get(kind, kind.replace("_", " ").title())
@@ -113,14 +115,31 @@ def _nearby_public_services(lat: float, lon: float, radius_m: int = 25000) -> li
         if key in seen:
             continue
         seen.add(key)
+        address_parts = [
+            " ".join(part for part in [str(tags.get("addr:housenumber") or "").strip(), str(tags.get("addr:street") or "").strip()] if part),
+            str(tags.get("addr:suburb") or tags.get("addr:neighbourhood") or "").strip(),
+            str(tags.get("addr:city") or tags.get("addr:town") or tags.get("addr:village") or "").strip(),
+            str(tags.get("addr:district") or "").strip(),
+            str(tags.get("addr:state") or "").strip(),
+            str(tags.get("addr:postcode") or "").strip(),
+        ]
+        address = ", ".join(part for part in address_parts if part)
+        element_type = str(item.get("type") or "node")
+        element_id = item.get("id")
+        source_url = f"https://www.openstreetmap.org/{element_type}/{element_id}" if element_id else "https://www.openstreetmap.org/"
         results.append({
             "name": name,
             "type": service_type,
             "distance_km": distance,
             "phone": phone,
+            "address": address,
+            "website": str(tags.get("contact:website") or tags.get("website") or "").strip(),
             "source": "OpenStreetMap public directory",
+            "source_url": source_url,
+            "lat": float(coords["lat"]),
+            "lon": float(coords["lon"]),
         })
-    return sorted(results, key=lambda row: row["distance_km"])[:30]
+    return sorted(results, key=lambda row: row["distance_km"])[:100]
 
 
 active_incidents = [
