@@ -60,10 +60,10 @@ def _distance_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 
 
 @st.cache_data(ttl=300, show_spinner=False)
-def _nearby_public_services(lat: float, lon: float, radius_m: int = 50000) -> tuple[list[dict], str | None]:
+def _nearby_public_services(lat: float, lon: float, radius_m: int = 20000) -> tuple[list[dict], str | None]:
     """Find mapped emergency facilities and distinguish empty results from lookup outages."""
     query = f"""
-    [out:json][timeout:20];
+    [out:json][timeout:10];
     (
       nwr(around:{radius_m},{lat},{lon})[amenity~"^(police|fire_station)$"];
       nwr(around:{radius_m},{lat},{lon})[emergency~"^(ambulance_station|fire_station|ambulance_centre|rescue_station|rescue_service|ambulance_rendezvous_point|lifeguard|mountain_rescue|water_rescue_station|water_rescue)$"];
@@ -84,13 +84,11 @@ def _nearby_public_services(lat: float, lon: float, radius_m: int = 50000) -> tu
     endpoints = (
         "https://overpass-api.de/api/interpreter",
         "https://overpass.kumi.systems/api/interpreter",
-        "https://overpass.nchc.org.tw/api/interpreter",
-        "https://overpass.private.coffee/api/interpreter",
     )
     for endpoint in endpoints:
         try:
             response = requests.post(
-                endpoint, data={"data": query}, headers=headers, timeout=(5, 20)
+                endpoint, data={"data": query}, headers=headers, timeout=(3, 12)
             )
             response.raise_for_status()
             candidate = response.json()
@@ -276,12 +274,12 @@ else:
     elif not major_hospitals:
         st.info(
             "No major hospital records with a listed phone number were found in the public directory "
-            "within 50 km. ResQ-AI will not substitute small clinics or invent contact details. "
+            "within 20 km. ResQ-AI will not substitute small clinics or invent contact details. "
             "Contact local emergency services directly."
         )
     else:
         st.caption(
-            f"Showing {len(major_hospitals)} major hospital(s) within 50 km, nearest first, "
+            f"Showing {len(major_hospitals)} major hospital(s) within 20 km, nearest first, "
             "with phone numbers listed in the public directory."
         )
         for hospital in major_hospitals:
@@ -318,7 +316,9 @@ st.caption(
 )
 response_station_types = {
     "Fire station", "Police station", "Ambulance station", "Ambulance centre",
-    "Rescue station", "Rescue service", "Ambulance point", "Ambulance service", "Emergency unit",
+    "Rescue station", "Rescue service", "Ambulance point", "Ambulance service",
+    "Emergency unit", "Lifeguard / water rescue", "Mountain rescue",
+    "Water rescue station", "Water rescue service",
 }
 response_stations = [
     service for service in (nearby_services if lat is not None and lon is not None and "nearby_services" in locals() else [])
@@ -370,7 +370,7 @@ else:
             )
     else:
         st.info(
-            "The OpenStreetMap lookup succeeded but returned no matching emergency-service listings within 50 km. "
+            "The OpenStreetMap lookup succeeded but returned no matching emergency-service listings within 20 km. "
             "Coverage may be incomplete. Use the map/source search or contact local emergency authorities directly; "
             "this is not proof that services are absent."
         )
