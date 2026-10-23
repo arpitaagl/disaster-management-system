@@ -59,11 +59,6 @@ def _distance_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     return radius * 2 * math.atan2(math.sqrt(value), math.sqrt(max(0.0, 1.0 - value)))
 
 
-@st.cache_data(ttl=900, show_spinner=False)
-def _nearby_public_services(lat: float, lon: float, radius_m: int = 50000) -> tuple[list[dict], str | None]:
-    """Find real nearby rescue-related directory listings without Overpass or NDRF HTML scraping."""
-    return nearby_rescue_listings(lat, lon, limit=7)
-
 active_incidents = [
     incident for incident in center.incidents
     if str(incident.get("status") or "").strip().lower() != "resolved"
