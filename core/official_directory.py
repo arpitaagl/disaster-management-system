@@ -125,11 +125,11 @@ def nearby_major_hospitals(lat: Any, lon: Any, limit: int = 5) -> tuple[list[dic
         phone = str(record.get("phone") or "").strip()
         facility_type = str(record.get("facility_type") or "").strip()
         name_key, type_key = name.casefold(), facility_type.casefold()
-        if not name or not phone or any(term in type_key for term in excluded):
+        if not name or any(term in type_key for term in excluded):
             continue
         if not (any(term in type_key for term in major_terms) or any(term in name_key for term in major_terms)):
             continue
-        key = (name_key, phone)
+        key = name_key
         if key in seen:
             continue
         seen.add(key)
