@@ -418,6 +418,73 @@ def _safety_guidance(question: str) -> str | None:
     return None
 
 
+def smart_emergency_guidance(
+    hazard: str,
+    situation: str,
+    injured: bool = False,
+    trapped: bool = False,
+) -> str:
+    """Build conservative, situation-specific next steps from user-selected facts."""
+    hazard = (hazard or "Other emergency").strip()
+    situation = (situation or "Not sure").strip()
+    guidance = {
+        "Flood": {
+            "Indoors": "Move to higher ground if you can do so safely and follow official evacuation instructions. Do not enter floodwater.",
+            "Outdoors": "Move away from drains, riverbanks, and floodwater toward higher ground. Do not walk or drive through water.",
+            "In a vehicle": "If floodwater is around the vehicle, leave it only if you can reach safer high ground without entering fast-moving water; otherwise call emergency services and follow their instructions.",
+            "Near water": "Move away from the water edge to higher ground. Do not attempt to cross flooded roads or streams.",
+        },
+        "Earthquake": {
+            "Indoors": "If shaking is happening, Drop, Cover, and Hold On; stay away from windows and do not use elevators. After shaking, leave damaged buildings when safe.",
+            "Outdoors": "Move to an open area away from buildings, walls, trees, and power lines; protect your head from falling debris.",
+            "In a vehicle": "Pull over away from bridges, buildings, and power lines; remain inside until shaking stops, then check for hazards before moving.",
+            "Near water": "Move away from the shoreline after strong or long shaking and follow official tsunami or evacuation alerts.",
+        },
+        "Fire or smoke": {
+            "Indoors": "Leave by the safest exit, stay low under smoke, and do not use elevators. Once outside, stay outside.",
+            "Outdoors": "Move away from smoke and fire toward a safe area; do not re-enter a burning building.",
+            "In a vehicle": "Stop away from smoke and flames if safe, leave the vehicle, and move to a safe area. Do not drive through smoke or fire.",
+            "Near water": "Move away from fire and smoke toward a safe exit; do not enter an unsafe area to retrieve belongings.",
+        },
+        "Cyclone or severe storm": {
+            "Indoors": "Shelter in a sturdy building away from windows. Follow official evacuation instructions and stay sheltered until authorities say it is safe.",
+            "Outdoors": "Get to a sturdy shelter if it is safely reachable; avoid trees, signs, flood-prone areas, and downed wires.",
+            "In a vehicle": "Avoid driving through floodwater or exposed areas. Follow official route and evacuation directions.",
+            "Near water": "Move inland and away from beaches and storm-surge areas; obey evacuation instructions.",
+        },
+        "Building collapse": {
+            "Indoors": "If the structure is unstable, leave by a safe exit if possible. Do not use elevators or re-enter a damaged building.",
+            "Outdoors": "Move away from the building facade and falling debris. Keep clear of damaged structures and let responders assess them.",
+            "In a vehicle": "Stop away from damaged buildings and overhead hazards if safe; do not drive through debris.",
+            "Near water": "Move to a safe open area away from damaged structures and report hazards to responders.",
+        },
+        "Other emergency": {
+            "Indoors": "Move away from the immediate hazard if you can do so safely, and follow instructions from local emergency services.",
+            "Outdoors": "Move to a safer location away from the hazard and keep an exit route clear.",
+            "In a vehicle": "Stop only when safe, avoid blocking responders, and follow emergency-service instructions.",
+            "Near water": "Move away from the immediate hazard to a safer location and follow official instructions.",
+        },
+    }
+    situation_steps = guidance.get(hazard, guidance["Other emergency"]).get(
+        situation, "Move away from the immediate hazard if safe and follow local emergency instructions."
+    )
+    next_steps = [situation_steps]
+    if injured:
+        next_steps.append("Someone is injured: contact emergency services now and describe the injury and exact location. Avoid moving someone with a possible serious injury unless staying there is more dangerous.")
+    if trapped:
+        next_steps.append("Someone is trapped: call emergency services, share the exact location and safest access route, and do not enter unstable or hazardous areas to attempt a rescue.")
+    if not injured and not trapped:
+        next_steps.append("If anyone is hurt, trapped, or in immediate danger, contact emergency services now and share your exact location.")
+    lines = [f"**Your situation: {hazard} · {situation}**", ""]
+    lines.extend(f"{index}. {step}" for index, step in enumerate(next_steps, start=1))
+    lines.extend([
+        "",
+        "In India, call [112](https://112.gov.in/) for emergency help; elsewhere, call your local emergency number. ResQ Assistant cannot contact or dispatch responders.",
+        "Follow current instructions from local authorities. This guidance is general and cannot verify conditions at your location. [India NDMA](https://ndma.gov.in/)",
+    ])
+    return "\n".join(lines)
+
+
 def _fallback(question: str, center: CommandCenter) -> str:
     q = question.lower()
     app_help = _app_help(question)

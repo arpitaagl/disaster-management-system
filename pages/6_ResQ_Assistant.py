@@ -48,7 +48,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-from components.chatbot import render_chatbot
+from components.chatbot import render_chatbot, smart_emergency_guidance
 from components.session import get_center
 
 from resq_mcp.logic import generate_incident_brief
@@ -89,5 +89,34 @@ if brief_result:
         st.caption(brief_result.get("aws_note", ""))
     st.text(brief_result["brief"])
     st.caption("Verify all reports, capacities, and recommendations with the responsible coordinator.")
+
+st.markdown("## Smart Emergency Guidance")
+st.caption("Choose what is happening and where you are to get immediate, situation-based next steps.")
+with st.form("smart_emergency_guidance_form"):
+    hazard_col, situation_col = st.columns(2)
+    with hazard_col:
+        hazard = st.selectbox(
+            "What is happening?",
+            ["Flood", "Earthquake", "Fire or smoke", "Cyclone or severe storm", "Building collapse", "Other emergency"],
+        )
+    with situation_col:
+        situation = st.selectbox(
+            "Where are you right now?",
+            ["Indoors", "Outdoors", "In a vehicle", "Near water", "Not sure"],
+        )
+    injured_col, trapped_col = st.columns(2)
+    with injured_col:
+        injured = st.checkbox("Someone is injured")
+    with trapped_col:
+        trapped = st.checkbox("Someone is trapped")
+    guidance_submitted = st.form_submit_button("Show next steps", type="primary")
+
+if guidance_submitted:
+    st.session_state["smart_emergency_guidance"] = smart_emergency_guidance(
+        hazard, situation, injured=injured, trapped=trapped
+    )
+if st.session_state.get("smart_emergency_guidance"):
+    st.warning("If there is immediate danger, call emergency services now. Do not delay to use this app.", icon="🚨")
+    st.markdown(st.session_state["smart_emergency_guidance"])
 
 render_chatbot(center)
