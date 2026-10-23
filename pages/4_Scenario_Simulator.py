@@ -6,7 +6,7 @@ import streamlit as st
 
 from components.session import get_center, persist
 from components.theme import page_setup, render_header, render_sidebar
-from core.official_directory import nearby_public_hospitals
+from core.official_directory import nearby_major_hospitals
 
 page_setup("Scenario Simulator")
 
@@ -202,69 +202,16 @@ with detail_right:
     st.write(str(incident.get("reported_at") or "Timestamp not available"))
 
 st.divider()
-st.markdown("### Nearby hospitals and emergency services")
-st.caption(f"Search location: {location_text or location} · nearest first · straight-line distance estimate. Public directory entries do not confirm live availability or dispatch readiness.")
-if lat is None or lon is None:
-    st.warning("This incident has no usable coordinates. Reopen the report and enter its location before searching nearby services.")
-else:
-    try:
-        with st.spinner("Searching public service directories near the incident…"):
-            nearby_services = _nearby_public_services(float(lat), float(lon))
-        if nearby_services:
-            for service in nearby_services:
-                service_cols = st.columns([3, 1, 2])
-                service_cols[0].markdown(f"**{service['name']}**")
-                service_cols[0].caption(service["type"])
-                service_cols[1].markdown(f"{service['distance_km']:.1f} km")
-                service_cols[2].markdown(service["phone"] if service["phone"] else "Contact number not listed")
-                if service["phone"]:
-                    service_cols[2].caption("Publicly listed number; call to confirm.")
-            st.caption("Source: OpenStreetMap public directory. Contact details are displayed only when listed; they are not independently phone-verified by ResQ-AI.")
-        else:
-            st.warning("No nearby hospitals or emergency-service locations were found in the public directory within 25 km. Contact local emergency services directly.")
-    except Exception:
-        st.warning("The public service directory could not be reached right now. No facilities or phone numbers have been invented. Please contact local emergency services directly.")
-
-st.markdown("### Nearby hospitals and contact details")
-st.caption("India hospital reference directory · nearest first · straight-line distance, not driving time. These listings do not confirm current opening status, emergency capability, or available beds.")
+st.markdown("### Major nearby hospitals with listed contacts")
+st.caption("Major hospital records with a phone number listed in the public reference directory · nearest first. Numbers have not been independently phone-verified; live emergency capability and bed availability are unknown.")
 if lat is None or lon is None:
     st.warning("This incident has no usable coordinates, so nearby hospitals cannot be searched.")
 else:
     with st.spinner("Finding major hospitals with listed contact numbers…"):
-        hospital_records, hospital_lookup_error = nearby_public_hospitals(lat, lon, limit=100)
+        major_hospitals, hospital_lookup_error = nearby_major_hospitals(lat, lon, limit=5)
     if hospital_lookup_error:
         st.warning(f"{hospital_lookup_error} Retry shortly. No hospital names or phone numbers have been fabricated.")
     else:
-        # Exclude small primary-care points and records without a contact number.
-        # Keep only hospital-level facilities with a named record and a listed phone.
-        excluded_facility_terms = (
-            "subcentre", "sub center", "sub-centre", "primary health centre",
-            "primary health center", "dispensary", "clinic", "urban health centre",
-            "urban health center", "health sub-centre", "health sub center",
-        )
-        major_facility_terms = (
-            "hospital", "medical college", "aiims", "institute of medical sciences",
-            "super speciality", "super specialty", "tertiary care",
-        )
-        major_hospitals = []
-        for hospital in hospital_records:
-            name = str(hospital.get("name") or "").strip()
-            facility_type = str(hospital.get("facility_type") or "").strip()
-            phone = str(hospital.get("phone") or "").strip()
-            searchable_type = facility_type.casefold()
-            searchable_name = name.casefold()
-            if not name or not phone:
-                continue
-            if any(term in searchable_type for term in excluded_facility_terms):
-                continue
-            if not (
-                any(term in searchable_type for term in major_facility_terms)
-                or any(term in searchable_name for term in major_facility_terms)
-            ):
-                continue
-            major_hospitals.append(hospital)
-
-        major_hospitals = major_hospitals[:5]
         if not major_hospitals:
             st.info(
                 "No major hospital records with a listed phone number were found in the public directory "
