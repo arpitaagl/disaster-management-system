@@ -158,7 +158,7 @@ def nearby_major_hospitals(lat: Any, lon: Any, limit: int = 5) -> tuple[list[dic
 
 
 
-NDRF_UNITS_URL = "https://www.ndrf.gov.in/ndrf-units"
+NDRF_UNITS_URL = "https://ndrf.gov.in/en/ndrf-units"
 
 
 @st.cache_data(ttl=86400, show_spinner=False)
@@ -199,7 +199,7 @@ def _fetch_official_ndrf_units() -> tuple[list[dict[str, Any]], str | None]:
             timeout=(4, 12),
         )
         response.raise_for_status()
-        tables = pd.read_html(StringIO(response.text))
+        tables = pd.read_html(StringIO(response.text), displayed_only=False)
     except (requests.RequestException, ValueError, ImportError, OSError) as exc:
         return [], f"Official NDRF directory is temporarily unavailable ({type(exc).__name__})."
 
