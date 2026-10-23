@@ -381,16 +381,57 @@ if lat is not None and lon is not None:
                 "phone": str(resource.get("phone") or resource.get("contact_phone") or "").strip(),
                 "capacity": resource.get("capacity"),
                 "capabilities": resource.get("capabilities") or [],
+                "is_demo": False,
             })
         except (TypeError, ValueError):
             continue
+
+# Demo-only fallback for presentations: create clearly labelled mock teams around
+# the selected incident so the ranking UI can be demonstrated without implying
+# that these units exist or are dispatch-ready. Never mix them into real inventory.
+if lat is not None and lon is not None and not resource_rows:
+    demo_templates = [
+        ("Demo Rescue Team Alpha", "rescue_team", 12, "flood,collapse,evacuation,search", 0.012, 0.008),
+        ("Demo Rescue Team Bravo", "rescue_team", 10, "flood,evacuation,search", -0.018, 0.010),
+        ("Demo Medical Rescue Delta", "medical_rescue", 8, "medical,trauma,evacuation", 0.006, -0.020),
+        ("Demo Ambulance Unit 7", "ambulance", 2, "medical,accident,transfer", -0.008, -0.006),
+        ("Demo Fire Response Team 9", "fire_response", 8, "fire,hazmat,gas", 0.025, -0.012),
+        ("Demo Search & Rescue Charlie", "rescue_team", 9, "collapse,landslide,search", -0.028, -0.014),
+        ("Demo Flood Response Echo", "rescue_team", 11, "flood,boat,evacuation", 0.035, 0.018),
+        ("Demo Medical Unit Foxtrot", "medical_rescue", 6, "medical,heatstress,evacuation", -0.040, 0.006),
+        ("Demo Fire Unit Kilo", "fire_response", 7, "fire,gas,rescue", 0.015, 0.032),
+        ("Demo Ambulance Unit 8", "ambulance", 2, "medical,transfer", -0.020, 0.030),
+    ]
+    for index, (name, team_type, capacity, capabilities, dlat, dlon) in enumerate(demo_templates, start=1):
+        demo_lat = max(-90.0, min(90.0, float(lat) + dlat))
+        demo_lon = max(-180.0, min(180.0, float(lon) + dlon))
+        resource_rows.append({
+            "id": f"DEMO-{index:02d}",
+            "name": name,
+            "type": team_type.replace("_", " ").title(),
+            "status": "SIMULATED — not live",
+            "distance_km": _distance_km(float(lat), float(lon), demo_lat, demo_lon),
+            "phone": "",
+            "capacity": capacity,
+            "capabilities": capabilities,
+            "is_demo": True,
+        })
 
 resource_rows.sort(key=lambda row: row["distance_km"])
 resource_rows = resource_rows[:10]
 if lat is None or lon is None:
     st.warning("This incident has no usable coordinates, so nearest rescue teams cannot be ranked.")
 elif resource_rows:
-    st.caption(f"Showing {len(resource_rows)} verified resource record(s), nearest first.")
+    demo_only = all(resource.get("is_demo") for resource in resource_rows)
+    if demo_only:
+        st.warning(
+            "DEMO MODE: The following 10 mock rescue resources are generated around this incident "
+            "only to demonstrate sorting and UI. They are fictional, not real teams; locations, "
+            "capacity and status are simulated. Do not use them for real-world dispatch."
+        )
+        st.caption("Showing simulated demo resources, nearest first — not verified inventory.")
+    else:
+        st.caption(f"Showing {len(resource_rows)} verified resource record(s), nearest first.")
     for resource in resource_rows:
         with st.container(border=True):
             rc = st.columns([3, 1, 2])
@@ -398,6 +439,8 @@ elif resource_rows:
             rc[0].caption(f"{resource['type']} · ID {resource['id'] or 'not listed'}")
             rc[1].markdown(f"{resource['distance_km']:.1f} km")
             rc[2].markdown(f"**Status:** {resource['status']}")
+            if resource.get("is_demo"):
+                st.caption("SIMULATED DEMO DATA · not a real unit · no dispatch/contact available")
             details = []
             if resource["capacity"] is not None:
                 details.append(f"Recorded capacity: {resource['capacity']}")
