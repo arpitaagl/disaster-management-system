@@ -362,8 +362,9 @@ else:
 
 st.markdown("### Nearest rescue teams")
 st.caption(
-    "Verified team/resource inventory only, ranked by straight-line distance from the selected incident. "
-    "Status and contact details are shown as recorded; this is not a dispatch confirmation or live ETA."
+    "Closest teams are listed first using the incident's saved coordinates. Only records marked as "
+    "operator-verified, official, or from a trusted live feed are shown. Distances are straight-line "
+    "estimates—not driving times—and a listing does not mean the team is available or dispatched."
 )
 verified_resources = [
     resource for resource in center.resources
@@ -393,7 +394,7 @@ resource_rows = resource_rows[:10]
 if lat is None or lon is None:
     st.warning("This incident has no usable coordinates, so nearest rescue teams cannot be ranked.")
 elif resource_rows:
-    st.caption(f"Showing {len(resource_rows)} verified resource record(s), nearest first.")
+    st.caption(f"{len(resource_rows)} verified resource record(s) found · sorted nearest first.")
     for resource in resource_rows:
         with st.container(border=True):
             st.markdown(f"**{resource['name']}**")
@@ -420,15 +421,17 @@ elif resource_rows:
                 )
             else:
                 st.write("**Listed contact:** Not available")
-            st.caption("Source: connected resource inventory. Confirm status and location before dispatch.")
+            st.caption("Source: connected resource inventory · confirm this team's current status and location with the coordinator before dispatch.")
     st.warning(
         "Distance is straight-line, not road travel distance. Confirm the team's status, location, capability, "
         "and availability with the responsible coordinator before dispatch."
     )
 else:
     st.info(
-        "No geolocated, verified rescue-team inventory records are connected for this incident. "
-        "Public emergency-station listings above are directory leads, not confirmed available teams."
+        "No verified rescue-team records with usable coordinates were found for this incident. "
+        "This does not mean no teams exist nearby. Connect an operator-verified inventory or trusted "
+        "official feed with team name, coordinates, status, capabilities, and contact details. "
+        "Public station listings above are separate directory leads, not confirmed dispatch-ready teams."
     )
 
 if is_unclassified:
