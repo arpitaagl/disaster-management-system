@@ -260,12 +260,12 @@ if lat is not None and lon is not None:
     except (TypeError, ValueError, requests.RequestException) as exc:
         service_lookup_error = f"Public OpenStreetMap lookup failed ({type(exc).__name__})."
 
-st.markdown("### Major nearby hospitals with listed contacts")
-st.caption("Major hospital records with a phone number listed in the public reference directory · nearest first. Numbers have not been independently phone-verified; live emergency capability and bed availability are unknown.")
+st.markdown("### Nearby hospitals")
+st.caption("Nearby hospital records from the public reference directory · nearest first. Phone numbers appear only when listed; live emergency capability and bed availability are unknown.")
 if lat is None or lon is None:
     st.warning("This incident has no usable coordinates, so nearby hospitals cannot be searched.")
 else:
-    with st.spinner("Finding major hospitals with listed contact numbers…"):
+    with st.spinner("Finding nearby hospitals…"):
         major_hospitals, hospital_lookup_error = nearby_major_hospitals(lat, lon, limit=5)
     if hospital_lookup_error:
         st.warning(f"{hospital_lookup_error} Retry shortly. No hospital names or phone numbers have been fabricated.")
@@ -295,8 +295,11 @@ else:
                     ] if part
                 )
                 st.write(address or "Address not listed in the public directory.")
-                st.write(f"**Listed contact:** {hospital['phone']}")
-                st.link_button("Call hospital", f"tel:{hospital['phone']}")
+                if hospital.get("phone"):
+                    st.write(f"**Listed contact:** {hospital['phone']}")
+                    st.link_button("Call hospital", f"tel:{hospital['phone']}")
+                else:
+                    st.write("**Listed contact:** Not available in the public directory.")
                 st.caption(
                     "Source: India hospital reference directory. Listed contact only; "
                     "not independently verified by ResQ-AI. Call to confirm."
