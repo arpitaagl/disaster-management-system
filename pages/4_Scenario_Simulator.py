@@ -270,6 +270,7 @@ else:
                     "Source: India hospital reference directory. Listed contact only; "
                     "not independently verified by ResQ-AI. Call to confirm."
                 )
+                st.markdown("[Open source directory](https://livingatlas.esri.in/server/rest/services/LivingAtlas/IND_Hospital_Directory/MapServer/0)")
 
 st.markdown("### Nearby emergency response services")
 st.caption(
