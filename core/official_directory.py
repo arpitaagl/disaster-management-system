@@ -90,3 +90,43 @@ def nearby_public_hospitals(lat: Any, lon: Any, limit: int = 10) -> tuple[list[d
         return _query_hospitals(round(lat_f, 5), round(lon_f, 5))[:limit], None
     except (requests.RequestException, ValueError, RuntimeError) as exc:
         return [], f"Public hospital directory is temporarily unavailable ({type(exc).__name__})."
+
+
+
+def nearby_major_hospitals(lat: Any, lon: Any, limit: int = 5) -> tuple[list[dict[str, Any]], str | None]:
+    """Return named hospital-level facilities with a directory-listed phone number.
+
+    The source is a public reference directory, not an official live contact registry.
+    A listed number must never be described as independently verified by ResQ-AI.
+    """
+    records, error = nearby_public_hospitals(lat, lon, limit=1000)
+    if error:
+        return [], error
+
+    excluded = (
+        "subcentre", "sub center", "sub-centre", "primary health centre",
+        "primary health center", "dispensary", "clinic", "urban health centre",
+        "urban health center", "health sub-centre", "health sub center",
+        "anganwadi", "wellness centre", "wellness center",
+    )
+    major_terms = (
+        "hospital", "medical college", "aiims", "institute of medical sciences",
+        "super speciality", "super specialty", "tertiary care",
+    )
+    selected = []
+    seen = set()
+    for record in records:
+        name = str(record.get("name") or "").strip()
+        phone = str(record.get("phone") or "").strip()
+        facility_type = str(record.get("facility_type") or "").strip()
+        name_key, type_key = name.casefold(), facility_type.casefold()
+        if not name or not phone or any(term in type_key for term in excluded):
+            continue
+        if not (any(term in type_key for term in major_terms) or any(term in name_key for term in major_terms)):
+            continue
+        key = (name_key, phone)
+        if key in seen:
+            continue
+        seen.add(key)
+        selected.append(record)
+    return selected[:max(0, min(int(limit), 5))], None
