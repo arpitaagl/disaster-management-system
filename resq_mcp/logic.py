@@ -166,7 +166,7 @@ def generate_incident_brief(
     try:
         import boto3
         simulated = getattr(center, "demo_mode", True)
-        source_note = "simulated demo data" if simulated else "the current application session data"
+        source_note = "simulated data (demo mode)" if simulated else "the current application session data"
         credentials = {}
         if aws_access_key_id and aws_secret_access_key:
             credentials = {

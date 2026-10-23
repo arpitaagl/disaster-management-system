@@ -343,29 +343,73 @@ else:
         "Use the map/source search or contact local emergency authorities directly; this is not proof that services are absent."
     )
 
+st.markdown("### Nearest rescue teams")
+st.caption(
+    "Verified team/resource inventory only, ranked by straight-line distance from the selected incident. "
+    "Status and contact details are shown as recorded; this is not a dispatch confirmation or live ETA."
+)
 verified_resources = [
     resource for resource in center.resources
-    if str(resource.get("status") or "").strip().lower() == "available"
-    and resource.get("source") in {"operator-verified-upload", "trusted-live-feed", "official-feed"}
+    if resource.get("source") in {"operator-verified-upload", "trusted-live-feed", "official-feed"}
 ]
-if verified_resources:
-    st.markdown("**Connected verified resource records**")
-    resource_rows = []
+resource_rows = []
+if lat is not None and lon is not None:
     for resource in verified_resources:
-        if resource.get("lat") is None or resource.get("lon") is None or lat is None or lon is None:
+        try:
+            if resource.get("lat") is None or resource.get("lon") is None:
+                continue
+            resource_rows.append({
+                "id": str(resource.get("id") or ""),
+                "name": str(resource.get("name") or resource.get("id") or "Unnamed team"),
+                "type": str(resource.get("type") or "Rescue team").replace("_", " ").title(),
+                "status": str(resource.get("status") or "Status unknown"),
+                "distance_km": _distance_km(float(lat), float(lon), float(resource["lat"]), float(resource["lon"])),
+                "phone": str(resource.get("phone") or resource.get("contact_phone") or "").strip(),
+                "capacity": resource.get("capacity"),
+                "capabilities": resource.get("capabilities") or [],
+            })
+        except (TypeError, ValueError):
             continue
-        resource_rows.append({
-            "name": str(resource.get("name") or resource.get("id") or "Unnamed team"),
-            "type": str(resource.get("type") or "Rescue team").replace("_", " ").title(),
-            "distance_km": _distance_km(float(lat), float(lon), float(resource["lat"]), float(resource["lon"])),
-            "phone": str(resource.get("phone") or resource.get("contact_phone") or "").strip(),
-        })
-    for resource in sorted(resource_rows, key=lambda row: row["distance_km"]):
-        rc = st.columns([3, 1, 2])
-        rc[0].markdown(f"**{resource['name']}**")
-        rc[0].caption(resource["type"])
-        rc[1].markdown(f"{resource['distance_km']:.1f} km")
-        rc[2].markdown(resource["phone"] if resource["phone"] else "Contact number not listed")
+
+resource_rows.sort(key=lambda row: row["distance_km"])
+resource_rows = resource_rows[:10]
+if lat is None or lon is None:
+    st.warning("This incident has no usable coordinates, so nearest rescue teams cannot be ranked.")
+elif resource_rows:
+    st.caption(f"Showing {len(resource_rows)} verified resource record(s), nearest first.")
+    for resource in resource_rows:
+        with st.container(border=True):
+            rc = st.columns([3, 1, 2])
+            rc[0].markdown(f"**{resource['name']}**")
+            rc[0].caption(f"{resource['type']} · ID {resource['id'] or 'not listed'}")
+            rc[1].markdown(f"{resource['distance_km']:.1f} km")
+            rc[2].markdown(f"**Status:** {resource['status']}")
+            details = []
+            if resource["capacity"] is not None:
+                details.append(f"Recorded capacity: {resource['capacity']}")
+            capabilities = resource["capabilities"]
+            if isinstance(capabilities, (list, tuple, set)):
+                capability_text = ", ".join(str(item) for item in capabilities)
+            else:
+                capability_text = str(capabilities).strip()
+            if capability_text:
+                details.append(f"Capabilities: {capability_text}")
+            if details:
+                st.caption(" · ".join(details))
+            if resource["phone"]:
+                st.write(f"**Listed contact:** {resource['phone']}")
+                st.link_button("Call rescue team", f"tel:{resource['phone']}", key=f"call_rescue_{resource['id'] or resource['name']}")
+            else:
+                st.caption("Contact number not listed in the connected inventory.")
+    st.warning(
+        "Distance is straight-line, not road travel distance. Confirm the team's status, location, capability, "
+        "and availability with the responsible coordinator before dispatch."
+    )
+else:
+    st.info(
+        "No geolocated, verified rescue-team inventory records are connected for this incident. "
+        "Public emergency-station listings above are directory leads, not confirmed available teams."
+    )
 
 if is_unclassified:
     st.warning(
