@@ -271,23 +271,53 @@ else:
                     "not independently verified by ResQ-AI. Call to confirm."
                 )
 
-st.markdown("### Nearby emergency response stations")
-st.caption("Fire, police and ambulance facilities are shown as public-directory leads, not as confirmed dispatch-ready teams.")
-response_station_types = {"Fire station", "Police station", "Ambulance station", "Ambulance centre", "Rescue station", "Ambulance service"}
+st.markdown("### Nearby emergency response services")
+st.caption(
+    "Up to 10 nearby fire stations, police stations, ambulance stations and rescue listings from "
+    "OpenStreetMap. These are public-directory leads, not confirmed dispatch-ready teams. "
+    "A phone number appears only when the directory lists one."
+)
+response_station_types = {
+    "Fire station", "Police station", "Ambulance station", "Ambulance centre",
+    "Rescue station", "Ambulance service", "Emergency unit",
+}
 response_stations = [
     service for service in (nearby_services if lat is not None and lon is not None and "nearby_services" in locals() else [])
     if service["type"] in response_station_types
 ]
+response_stations = sorted(response_stations, key=lambda row: row["distance_km"])[:10]
 if response_stations:
+    st.caption(f"Showing {len(response_stations)} nearby listing(s), nearest first.")
     for service in response_stations:
-        rc = st.columns([3, 1, 2])
-        rc[0].markdown(f"**{service['name']}**")
-        rc[0].caption(service["type"])
-        rc[1].markdown(f"{service['distance_km']:.1f} km")
-        rc[2].markdown(service["phone"] if service["phone"] else "Contact number not listed")
-    st.caption("These listings do not verify whether a crew is on duty, equipped, or available to dispatch.")
+        with st.container(border=True):
+            rc = st.columns([3, 1, 2])
+            rc[0].markdown(f"**{service['name']}**")
+            rc[0].caption(service["type"])
+            rc[1].markdown(f"{service['distance_km']:.1f} km")
+            if service.get("phone"):
+                rc[2].markdown(f"**Listed phone:** {service['phone']}")
+                rc[2].link_button("Call listing", f"tel:{service['phone']}")
+            else:
+                rc[2].markdown("**Phone:** Not listed")
+            st.write(service.get("address") or "Full street address not available in the public listing.")
+            links = []
+            if service.get("website"):
+                links.append(f"[Website]({service['website']})")
+            if service.get("source_url"):
+                links.append(f"[Source listing]({service['source_url']})")
+            if links:
+                st.markdown(" · ".join(links))
+    st.warning(
+        "OpenStreetMap records are community-maintained and may be incomplete or outdated. "
+        "Call to confirm the number and location. ResQ-AI cannot confirm that any crew is on duty, "
+        "equipped, available, or dispatched."
+    )
 else:
-    st.info("No nearby response stations could be confirmed from the public directory in this lookup. This is not proof that no stations exist. ResQ-AI has no connected live roster to verify individual rescue teams.")
+    st.info(
+        "No nearby emergency-service listings were returned by the public directory for this location. "
+        "This does not prove that no services exist. The live lookup does not provide a verified rescue-team roster."
+    )
+
 verified_resources = [
     resource for resource in center.resources
     if str(resource.get("status") or "").strip().lower() == "available"
