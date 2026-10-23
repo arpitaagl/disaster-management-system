@@ -56,6 +56,7 @@ def nearby_rescue_listings(lat: Any, lon: Any, limit: int = 7) -> tuple[list[dic
 
         for feature in features:
             props = feature.get("properties") or {}
+            extra = props.get("extra") or {}
             coords = (feature.get("geometry") or {}).get("coordinates") or []
             if len(coords) < 2:
                 continue
@@ -91,9 +92,9 @@ def nearby_rescue_listings(lat: Any, lon: Any, limit: int = 7) -> tuple[list[dic
                 "name": name,
                 "type": "Rescue / disaster-response listing",
                 "distance_km": round(distance, 1),
-                "phone": str(props.get("phone") or "").strip(),
+                "phone": str(props.get("phone") or props.get("contact:phone") or extra.get("phone") or extra.get("contact:phone") or extra.get("contact:mobile") or "").strip(),
                 "address": address,
-                "website": str(props.get("website") or "").strip(),
+                "website": str(props.get("website") or props.get("contact:website") or extra.get("website") or extra.get("contact:website") or "").strip(),
                 "source": "Photon public place directory",
                 "source_url": f"https://www.openstreetmap.org/{osm_type.lower()}/{osm_id}" if osm_id else "https://photon.komoot.io/",
                 "lat": item_lat,
