@@ -65,11 +65,9 @@ def _nearby_public_services(lat: float, lon: float, radius_m: int = 20000) -> tu
     query = f"""
     [out:json][timeout:10];
     (
-      nwr(around:{radius_m},{lat},{lon})[amenity~"^(police|fire_station)$"];
-      nwr(around:{radius_m},{lat},{lon})[emergency~"^(ambulance_station|fire_station|ambulance_centre|rescue_station|rescue_service|ambulance_rendezvous_point|lifeguard|mountain_rescue|water_rescue_station|water_rescue)$"];
-      nwr(around:{radius_m},{lat},{lon})[healthcare~"^(ambulance_station|emergency_unit)$"];
-      nwr(around:{radius_m},{lat},{lon})[emergency="ambulance"];
-      nwr(around:{radius_m},{lat},{lon})[amenity="hospital"][emergency];
+      nwr(around:{radius_m},{lat},{lon})[emergency~"^(rescue|rescue_station|rescue_service|lifeguard|mountain_rescue|water_rescue_station|water_rescue)$"];
+      nwr(around:{radius_m},{lat},{lon})[amenity~"^(rescue_station)$"];
+      nwr(around:{radius_m},{lat},{lon})[rescue="yes"];
     );
     out center tags;
     """
@@ -116,6 +114,7 @@ def _nearby_public_services(lat: float, lon: float, radius_m: int = 20000) -> tu
         "mountain_rescue": "Mountain rescue",
         "water_rescue_station": "Water rescue station",
         "water_rescue": "Water rescue service",
+        "rescue": "Rescue team",
     }
     results = []
     seen = set()
@@ -128,7 +127,7 @@ def _nearby_public_services(lat: float, lon: float, radius_m: int = 20000) -> tu
         # Keep the specific emergency tag instead of accidentally labelling a
         # facility from an unrelated tag; support both named and unnamed mapped sites.
         kind = next(
-            (str(tags.get(key) or "") for key in ("amenity", "emergency", "healthcare")
+            (str(tags.get(key) or "") for key in ("amenity", "emergency", "healthcare", "rescue")
              if str(tags.get(key) or "") in labels),
             "",
         )
@@ -308,16 +307,14 @@ else:
                 )
                 st.markdown("[Open source directory](https://livingatlas.esri.in/server/rest/services/LivingAtlas/IND_Hospital_Directory/MapServer/0)")
 
-st.markdown("### Nearby emergency response services")
+st.markdown("### Nearby rescue teams")
 st.caption(
-    "Up to 10 nearby fire stations, police stations, ambulance stations and rescue listings from "
-    "OpenStreetMap. These are public-directory leads, not confirmed dispatch-ready teams. "
-    "A phone number appears only when the directory lists one."
+    "Up to 10 nearby rescue-related listings from OpenStreetMap, ranked by distance from the reported incident coordinates. "
+    "These are public-directory leads, not confirmed dispatch-ready teams. A phone number appears only when mapped."
 )
 response_station_types = {
-    "Fire station", "Police station", "Ambulance station", "Ambulance centre",
-    "Rescue station", "Rescue service", "Ambulance point", "Ambulance service",
-    "Emergency unit", "Lifeguard / water rescue", "Mountain rescue",
+    "Rescue team", "Rescue station", "Rescue service",
+    "Lifeguard / water rescue", "Mountain rescue",
     "Water rescue station", "Water rescue service",
 }
 response_stations = [
@@ -370,7 +367,7 @@ else:
             )
     else:
         st.info(
-            "The OpenStreetMap lookup succeeded but returned no matching emergency-service listings within 20 km. "
+            "The OpenStreetMap lookup succeeded but returned no matching rescue listings within 20 km. "
             "Coverage may be incomplete. Use the map/source search or contact local emergency authorities directly; "
             "this is not proof that services are absent."
         )
