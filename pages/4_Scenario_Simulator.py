@@ -66,7 +66,7 @@ def _nearby_public_services(lat: float, lon: float, radius_m: int = 50000) -> tu
     [out:json][timeout:20];
     (
       nwr(around:{radius_m},{lat},{lon})[amenity~"^(police|fire_station)$"];
-      nwr(around:{radius_m},{lat},{lon})[emergency~"^(ambulance_station|fire_station|ambulance_centre|rescue_station|rescue_service|ambulance_rendezvous_point)$"];
+      nwr(around:{radius_m},{lat},{lon})[emergency~"^(ambulance_station|fire_station|ambulance_centre|rescue_station|rescue_service|ambulance_rendezvous_point|lifeguard|mountain_rescue|water_rescue_station|water_rescue)$"];
       nwr(around:{radius_m},{lat},{lon})[healthcare~"^(ambulance_station|emergency_unit)$"];
       nwr(around:{radius_m},{lat},{lon})[emergency="ambulance"];
       nwr(around:{radius_m},{lat},{lon})[amenity="hospital"][emergency];
@@ -114,6 +114,10 @@ def _nearby_public_services(lat: float, lon: float, radius_m: int = 50000) -> tu
         "ambulance_rendezvous_point": "Ambulance point",
         "emergency_unit": "Emergency unit",
         "ambulance": "Ambulance service",
+        "lifeguard": "Lifeguard / water rescue",
+        "mountain_rescue": "Mountain rescue",
+        "water_rescue_station": "Water rescue station",
+        "water_rescue": "Water rescue service",
     }
     results = []
     seen = set()
