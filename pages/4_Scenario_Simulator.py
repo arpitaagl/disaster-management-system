@@ -132,7 +132,7 @@ def _nearby_public_services(lat: float, lon: float, radius_m: int = 50000) -> tu
                 "lat": unit.get("lat"),
                 "lon": unit.get("lon"),
             }
-            for unit in units
+            for unit in units if unit.get("distance_km") is not None and float(unit["distance_km"]) <= 50
         ]
         if fallback:
             return sorted(fallback, key=lambda row: row["distance_km"])[:7], None
@@ -232,7 +232,7 @@ def _nearby_public_services(lat: float, lon: float, radius_m: int = 50000) -> tu
             "lat": unit.get("lat"),
             "lon": unit.get("lon"),
         }
-        for unit in units
+        for unit in units if unit.get("distance_km") is not None and float(unit["distance_km"]) <= 50
     ]
     if fallback:
         return sorted(fallback, key=lambda row: row["distance_km"])[:7], None
