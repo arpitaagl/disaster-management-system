@@ -60,8 +60,8 @@ def _distance_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 
 
 @st.cache_data(ttl=300, show_spinner=False)
-def _nearby_public_services(lat: float, lon: float, radius_m: int = 25000) -> list[dict]:
-    """Find mapped emergency facilities, retrying public Overpass mirrors on outages."""
+def _nearby_public_services(lat: float, lon: float, radius_m: int = 50000) -> tuple[list[dict], str | None]:
+    """Find mapped emergency facilities and distinguish empty results from lookup outages."""
     query = f"""
     [out:json][timeout:7];
     (
@@ -73,29 +73,36 @@ def _nearby_public_services(lat: float, lon: float, radius_m: int = 25000) -> li
     );
     out center tags;
     """
-    headers = {"User-Agent": "ResQ-AI public emergency service directory/1.0 (disaster response prototype)"}
+    if not (-90 <= float(lat) <= 90 and -180 <= float(lon) <= 180):
+        return [], "Incident coordinates are outside valid latitude/longitude ranges."
+
+    headers = {"User-Agent": "ResQ-AI public emergency service directory/1.0 (disaster response prototype; contact: project maintainers)"}
     payload = None
+    last_error = "No Overpass endpoint returned usable data."
     # Overpass is a volunteer-run public service. Try several public mirrors so
     # one busy/unavailable endpoint does not make the whole section empty.
     endpoints = (
         "https://overpass-api.de/api/interpreter",
         "https://overpass.kumi.systems/api/interpreter",
         "https://overpass.nchc.org.tw/api/interpreter",
+        "https://overpass.private.coffee/api/interpreter",
     )
     for endpoint in endpoints:
         try:
             response = requests.post(
-                endpoint, data={"data": query}, headers=headers, timeout=(2, 5)
+                endpoint, data={"data": query}, headers=headers, timeout=(5, 20)
             )
             response.raise_for_status()
             candidate = response.json()
             if isinstance(candidate, dict) and isinstance(candidate.get("elements"), list):
                 payload = candidate
                 break
-        except (requests.RequestException, ValueError, TypeError):
+            last_error = "An Overpass endpoint returned an unexpected response."
+        except (requests.RequestException, ValueError, TypeError) as exc:
+            last_error = f"Public OpenStreetMap lookup temporarily failed ({type(exc).__name__})."
             continue
     if payload is None:
-        return []
+        return [], last_error
 
     labels = {
         "police": "Police station",
@@ -163,7 +170,7 @@ def _nearby_public_services(lat: float, lon: float, radius_m: int = 25000) -> li
             "lat": service_lat,
             "lon": service_lon,
         })
-    return sorted(results, key=lambda row: row["distance_km"])[:100]
+    return sorted(results, key=lambda row: row["distance_km"])[:100], None
 
 active_incidents = [
     incident for incident in center.incidents
@@ -246,11 +253,12 @@ with detail_right:
 st.divider()
 # Fetch public emergency-station leads for the separate response-stations section below.
 nearby_services = []
+service_lookup_error = None
 if lat is not None and lon is not None:
     try:
-        nearby_services = _nearby_public_services(float(lat), float(lon))
-    except Exception:
-        nearby_services = []
+        nearby_services, service_lookup_error = _nearby_public_services(float(lat), float(lon))
+    except (TypeError, ValueError, requests.RequestException) as exc:
+        service_lookup_error = f"Public OpenStreetMap lookup failed ({type(exc).__name__})."
 
 st.markdown("### Major nearby hospitals with listed contacts")
 st.caption("Major hospital records with a phone number listed in the public reference directory · nearest first. Numbers have not been independently phone-verified; live emergency capability and bed availability are unknown.")
@@ -337,11 +345,17 @@ if response_stations:
         "equipped, available, or dispatched."
     )
 else:
-    st.warning(
-        "The public emergency directory returned no matching listings for these coordinates. "
-        "This can happen when OpenStreetMap has incomplete local coverage or all lookup mirrors are busy. "
-        "Use the map/source search or contact local emergency authorities directly; this is not proof that services are absent."
-    )
+    if service_lookup_error:
+        st.warning(
+            f"{service_lookup_error} The app tried multiple public Overpass mirrors. "
+            "Retry the lookup shortly or use the OpenStreetMap source search. This is not proof that services are absent."
+        )
+    else:
+        st.info(
+            "The OpenStreetMap lookup succeeded but returned no matching emergency-service listings within 50 km. "
+            "Coverage may be incomplete. Use the map/source search or contact local emergency authorities directly; "
+            "this is not proof that services are absent."
+        )
 
 st.markdown("### Nearest rescue teams")
 st.caption(
