@@ -202,6 +202,14 @@ with detail_right:
     st.write(str(incident.get("reported_at") or "Timestamp not available"))
 
 st.divider()
+# Fetch public emergency-station leads for the separate response-stations section below.
+nearby_services = []
+if lat is not None and lon is not None:
+    try:
+        nearby_services = _nearby_public_services(float(lat), float(lon))
+    except Exception:
+        nearby_services = []
+
 st.markdown("### Major nearby hospitals with listed contacts")
 st.caption("Major hospital records with a phone number listed in the public reference directory · nearest first. Numbers have not been independently phone-verified; live emergency capability and bed availability are unknown.")
 if lat is None or lon is None:
