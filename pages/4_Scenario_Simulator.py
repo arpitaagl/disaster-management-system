@@ -467,33 +467,40 @@ if st.button(
         after_distance = after.get("distance_km")
 
         st.markdown("#### Response plan comparison")
-        left, right = st.columns(2)
-        with left:
-            st.markdown("**Current conditions**")
-            st.metric("Candidate resource", str(before_name))
-            st.metric(
-                "Estimated distance",
-                f"{before_distance:.2f} km" if isinstance(before_distance, (int, float)) else "Unavailable",
+        if not center.resources:
+            st.info(
+                "Resource-plan comparison is unavailable because no operational resource inventory "
+                "is connected. This simulation can update incident conditions, but it cannot compare "
+                "resource assignments or estimate a dispatch distance."
             )
-            st.caption(str(before.get("reason") or "No allocation reason available."))
-        with right:
-            st.markdown("**Simulated conditions**")
-            st.metric(
-                "Candidate resource",
-                str(after_name),
-                delta=("Changed" if before_name != after_name else "Unchanged"),
-                delta_color="off",
-            )
-            st.metric(
-                "Estimated distance",
-                f"{after_distance:.2f} km" if isinstance(after_distance, (int, float)) else "Unavailable",
-            )
-            st.caption(str(after.get("reason") or "No allocation reason available."))
-
-        if before_name != after_name or before_distance != after_distance:
-            st.warning("The hypothetical condition changes the candidate plan. A human coordinator must verify all details.")
         else:
-            st.info("The selected resource recommendation did not change under this scenario. Review the reason and inventory assumptions.")
+            left, right = st.columns(2)
+            with left:
+                st.markdown("**Current conditions**")
+                st.metric("Candidate resource", str(before_name))
+                st.metric(
+                    "Estimated distance",
+                    f"{before_distance:.2f} km" if isinstance(before_distance, (int, float)) else "Unavailable",
+                )
+                st.caption(str(before.get("reason") or "No allocation reason available."))
+            with right:
+                st.markdown("**Simulated conditions**")
+                st.metric(
+                    "Candidate resource",
+                    str(after_name),
+                    delta=("Changed" if before_name != after_name else "Unchanged"),
+                    delta_color="off",
+                )
+                st.metric(
+                    "Estimated distance",
+                    f"{after_distance:.2f} km" if isinstance(after_distance, (int, float)) else "Unavailable",
+                )
+                st.caption(str(after.get("reason") or "No allocation reason available."))
+
+            if before_name != after_name or before_distance != after_distance:
+                st.warning("The hypothetical condition changes the candidate plan. A human coordinator must verify all details.")
+            else:
+                st.info("The selected resource recommendation did not change under this scenario. Review the reason and inventory assumptions.")
         if after.get("hospital_name") or after.get("hospital_id"):
             st.write(
                 "**Hospital lead after simulation:** "
