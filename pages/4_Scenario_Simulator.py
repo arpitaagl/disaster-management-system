@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import re
 import requests
 import streamlit as st
 
@@ -60,7 +61,7 @@ def _distance_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 
 
 @st.cache_data(ttl=300, show_spinner=False)
-def _nearby_public_services(lat: float, lon: float, radius_m: int = 20000) -> tuple[list[dict], str | None]:
+def _nearby_public_services(lat: float, lon: float, radius_m: int = 50000) -> tuple[list[dict], str | None]:
     """Find nearby mapped rescue-related listings, tolerating individual Overpass outages."""
     if not (-90 <= float(lat) <= 90 and -180 <= float(lon) <= 180):
         return [], "Incident coordinates are outside valid latitude/longitude ranges."
@@ -137,10 +138,10 @@ def _nearby_public_services(lat: float, lon: float, radius_m: int = 20000) -> tu
             "",
         )
         # Name-matched NDRF/SDRF/civil-defence listings may not have rescue tags.
-        if not kind and __import__("re").search(
+        if not kind and re.search(
             r"\b(NDRF|SDRF|rescue|disaster response|civil defence|civil defense)\b",
             name,
-            flags=__import__("re").IGNORECASE,
+            flags=re.IGNORECASE,
         ):
             kind = "rescue"
         if not kind:
@@ -374,12 +375,12 @@ else:
                 use_container_width=True,
             )
             st.caption(
-                "The map opens at the reported incident location. Emergency-service listings depend on "
+                "The map opens at the reported incident location. Rescue listings depend on "
                 "what OpenStreetMap contributors have mapped; verify any contact details before relying on them."
             )
     else:
         st.info(
-            "The OpenStreetMap lookup succeeded but returned no matching rescue listings within 20 km. "
+            "The OpenStreetMap lookup succeeded but returned no matching rescue listings within 50 km. "
             "Coverage may be incomplete. Use the map/source search or contact local emergency authorities directly; "
             "this is not proof that services are absent."
         )
