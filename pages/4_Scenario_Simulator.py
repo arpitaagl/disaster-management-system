@@ -318,7 +318,9 @@ st.caption(
 )
 response_station_types = {
     "Fire station", "Police station", "Ambulance station", "Ambulance centre",
-    "Rescue station", "Rescue service", "Ambulance point", "Ambulance service", "Emergency unit",
+    "Rescue station", "Rescue service", "Ambulance point", "Ambulance service",
+    "Emergency unit", "Lifeguard / water rescue", "Mountain rescue",
+    "Water rescue station", "Water rescue service",
 }
 response_stations = [
     service for service in (nearby_services if lat is not None and lon is not None and "nearby_services" in locals() else [])
