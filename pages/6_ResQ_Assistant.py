@@ -53,6 +53,8 @@ st.markdown(
 from components.chatbot import render_chatbot, smart_emergency_guidance
 from components.session import get_center
 
+center = get_center()
+
 st.markdown("## Smart Emergency Guidance")
 st.caption("Choose what is happening and where you are to get immediate, situation-based next steps.")
 with st.form("smart_emergency_guidance_form"):
