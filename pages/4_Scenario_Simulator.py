@@ -459,6 +459,7 @@ cols = st.columns(len(counts))
 for col, (label, count) in zip(cols, counts.items()):
     col.metric(label, count)
 
+if not verified_resources:
     st.error(
         "Resource allocation unavailable: no verified rescue-team inventory is connected. "
         "No team name, distance, ambulance, or medication availability can be recommended until "
