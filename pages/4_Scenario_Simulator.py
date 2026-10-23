@@ -7,7 +7,6 @@ import streamlit as st
 from components.session import get_center, persist
 from components.theme import page_setup, render_header, render_sidebar
 from core.official_directory import nearby_major_hospitals
-from core.rescue_directory import nearby_rescue_listings
 
 page_setup("Scenario Simulator")
 
@@ -144,15 +143,6 @@ with detail_right:
     st.write(str(incident.get("reported_at") or "Timestamp not available"))
 
 st.divider()
-# Fetch public emergency-station leads for the separate response-stations section below.
-nearby_services = []
-service_lookup_error = None
-if lat is not None and lon is not None:
-    try:
-        nearby_services, service_lookup_error = _nearby_public_services(float(lat), float(lon))
-    except (TypeError, ValueError, requests.RequestException) as exc:
-        service_lookup_error = f"Public OpenStreetMap lookup failed ({type(exc).__name__})."
-
 st.markdown("### Nearby hospitals")
 st.caption("Nearby hospital records from the public reference directory · nearest first. Phone numbers appear only when listed; live emergency capability and bed availability are unknown.")
 if lat is None or lon is None:
@@ -198,61 +188,6 @@ else:
                     "not independently verified by ResQ-AI. Call to confirm."
                 )
                 st.markdown("[Open source directory](https://livingatlas.esri.in/server/rest/services/LivingAtlas/IND_Hospital_Directory/MapServer/0)")
-
-st.markdown("### Nearby rescue teams")
-st.caption(
-    "Up to 7 nearby rescue and disaster-response listings, ranked by distance from the reported incident coordinates. Records are sourced from public place listings; contact details appear only when published. "
-    "These are directory leads, not confirmed dispatch-ready teams."
-)
-response_station_types = {
-    "Rescue team", "Rescue station", "Rescue service",
-    "Lifeguard / water rescue", "Mountain rescue",
-    "Water rescue station", "Water rescue service", "Official NDRF unit directory",
-}
-response_stations = [
-    service for service in (nearby_services if lat is not None and lon is not None and "nearby_services" in locals() else [])
-    if service["type"] in response_station_types
-]
-response_stations = sorted(response_stations, key=lambda row: row["distance_km"])[:7]
-if response_stations:
-    st.caption(f"Showing {len(response_stations)} nearby listing(s), nearest first.")
-    for service in response_stations:
-        with st.container(border=True):
-            rc = st.columns([3, 1, 2])
-            rc[0].markdown(f"**{service['name']}**")
-            rc[0].caption(service["type"])
-            rc[1].markdown(f"{service['distance_km']:.1f} km")
-            if service.get("phone"):
-                rc[2].markdown(f"**Listed phone:** {service['phone']}")
-                rc[2].link_button("Call listing", f"tel:{service['phone']}")
-            elif service.get("control_room"):
-                rc[2].markdown(f"**Control room:** {service['control_room']}")
-                rc[2].link_button("Call control room", f"tel:{service['control_room']}")
-            else:
-                rc[2].markdown("**Phone:** Not listed")
-            st.write(service.get("address") or "Full street address not available in the public listing.")
-            links = []
-            if service.get("website"):
-                links.append(f"[Website]({service['website']})")
-            if service.get("source_url"):
-                links.append(f"[Source listing]({service['source_url']})")
-            if links:
-                st.markdown(" · ".join(links))
-    st.warning(
-        "These are public-directory locations and contacts, not live team positions. OpenStreetMap records may be incomplete or outdated; NDRF entries are official unit contacts. "
-        "Call to confirm current availability. ResQ-AI cannot confirm that any crew is on duty, equipped, available, or dispatched."
-    )
-else:
-    if service_lookup_error:
-        st.warning(
-            "Nearby rescue listings could not be loaded from the public directories right now. "
-            "No teams or contact details have been invented. Please retry shortly or contact local emergency authorities."
-        )
-    else:
-        st.info(
-            "No matching rescue listings were returned within 50 km of this incident. "
-            "Public map coverage may be incomplete; this does not prove that rescue services are absent."
-        )
 
 if is_unclassified:
     st.warning(
