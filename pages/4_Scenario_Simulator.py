@@ -95,20 +95,25 @@ def _nearby_public_services(lat: float, lon: float, radius_m: int = 50000) -> tu
     last_error = "No public OpenStreetMap query endpoint returned usable data."
     for endpoint in endpoints:
         try:
-            response = requests.post(
-                endpoint,
-                data={"data": query},
-                headers=headers,
-                timeout=(5, 35),
-            )
+            response = requests.post(endpoint, data={"data": query}, headers=headers, timeout=(4, 12))
             response.raise_for_status()
             candidate = response.json()
             if isinstance(candidate, dict) and isinstance(candidate.get("elements"), list):
                 payload = candidate
                 break
             last_error = "An OpenStreetMap query endpoint returned an unexpected response."
-        except (requests.RequestException, ValueError, TypeError) as exc:
-            last_error = f"Public OpenStreetMap lookup temporarily failed ({type(exc).__name__})."
+        except (requests.RequestException, ValueError, TypeError) as post_exc:
+            # Try GET on the same public mirror: some hosting/proxy paths block POST.
+            try:
+                response = requests.get(endpoint, params={"data": query}, headers=headers, timeout=(4, 12))
+                response.raise_for_status()
+                candidate = response.json()
+                if isinstance(candidate, dict) and isinstance(candidate.get("elements"), list):
+                    payload = candidate
+                    break
+                last_error = "An OpenStreetMap query endpoint returned an unexpected response."
+            except (requests.RequestException, ValueError, TypeError) as get_exc:
+                last_error = f"OpenStreetMap lookup failed (POST {type(post_exc).__name__}; GET {type(get_exc).__name__})."
 
     if payload is None:
         # Overpass can be unreachable from hosted app environments. Fall back to
