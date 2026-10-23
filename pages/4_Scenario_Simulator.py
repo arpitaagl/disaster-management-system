@@ -198,17 +198,24 @@ st.caption(
     "Incident assessment and resource availability are separate. Public facility listings do not show live bed capacity or confirm dispatch readiness."
 )
 
-counts = {
-    "Active reported incidents": len(active_incidents),
-    "Verified resource records loaded": len(center.resources),
-    "Shelter records loaded": len(center.shelters),
-}
-cols = st.columns(len(counts))
-for col, (label, count) in zip(cols, counts.items()):
-    col.metric(label, count)
+hospital_directory_count = len(major_hospitals) if lat is not None and lon is not None and "major_hospitals" in locals() else 0
+readiness_cols = st.columns(3)
+readiness_cols[0].metric("Active reported incidents", len(active_incidents))
+readiness_cols[1].metric("Nearby hospital listings", hospital_directory_count)
+readiness_cols[2].metric(
+    "Operational resource inventory",
+    "Connected" if center.resources else "Not connected",
+)
+if center.shelters:
+    st.metric("Verified shelter records", len(center.shelters))
+else:
+    st.info("Shelter inventory is not connected. No verified shelter records are available to count.")
 
 if not center.resources:
-    pass
+    st.info(
+        "Operational resource inventory is not connected. Public hospital directory listings are shown above, "
+        "but they do not confirm rescue-team availability, dispatch readiness, or live bed capacity."
+    )
 elif not assignment or not assignment.get("resource_id"):
     st.warning(
         "No eligible nearby resource has been assigned from the currently loaded records. "
