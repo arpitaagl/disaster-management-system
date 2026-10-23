@@ -11,6 +11,7 @@ from components.theme import page_setup, render_header, render_sidebar
 from core.config import CITY_LAT, CITY_LON
 from core.persistence import is_configured, save_incident
 from utils.validation import validate_report
+from core.official_directory import nearby_public_hospitals
 
 def _geocode_location(address: str) -> tuple[float, float] | None:
     """Convert a user-entered address into latitude/longitude."""
@@ -244,6 +245,38 @@ if submitted:
             st.caption("A coordinator must verify the recommendation before operational use.")
         else:
             st.warning("No resource assignment is currently available. A coordinator should review the incident.")
+
+        st.markdown("### Nearby hospitals and contact details")
+        st.caption("Public hospital directory · nearest first · straight-line distance, not driving time. Phone numbers are shown only when listed by the source; current bed capacity and emergency availability are not confirmed.")
+        with st.spinner("Searching the public hospital directory near this incident…"):
+            nearby_hospitals, hospital_lookup_error = nearby_public_hospitals(lat, lon, limit=10)
+
+        if hospital_lookup_error:
+            st.warning(f"{hospital_lookup_error} Please retry shortly. No hospital names or phone numbers have been fabricated.")
+        elif not nearby_hospitals:
+            st.info("No hospital records were returned near this location by the public directory. This does not prove that no hospitals exist nearby.")
+        else:
+            st.caption(f"Showing {len(nearby_hospitals)} public directory record(s) within the directory search radius.")
+            for hospital in nearby_hospitals:
+                with st.container(border=True):
+                    st.markdown(f"**{hospital.get('name') or 'Unnamed health facility'}**")
+                    st.caption(
+                        f"{hospital.get('facility_type') or 'Health facility'} · "
+                        f"{hospital.get('distance_km', '—')} km away (straight-line)"
+                    )
+                    address = hospital.get("address") or ""
+                    district = hospital.get("district") or ""
+                    state = hospital.get("state") or ""
+                    location_label = ", ".join(part for part in [address, district, state] if part)
+                    st.write(location_label or "Address not listed in the public directory.")
+                    phone = str(hospital.get("phone") or "").strip()
+                    if phone:
+                        st.write(f"**Contact:** {phone}")
+                        if any(ch.isdigit() for ch in phone):
+                            st.link_button("Call hospital", f"tel:{phone}", use_container_width=False)
+                    else:
+                        st.caption("Phone number not listed in the public directory.")
+                    st.caption("Source: India hospital reference directory · Call to verify details and availability.")
 
         with st.expander("View extracted structured data (JSON)", expanded=False):
             st.caption("Technical view for debugging and review. This is data, not executable code.")
