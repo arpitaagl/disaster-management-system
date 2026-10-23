@@ -6,7 +6,7 @@ import streamlit as st
 
 from components.session import get_center, persist
 from components.theme import page_setup, render_header, render_sidebar
-from core.official_directory import nearby_public_hospitals
+from core.official_directory import nearby_major_hospitals
 
 page_setup("Scenario Simulator")
 
@@ -202,47 +202,39 @@ with detail_right:
     st.write(str(incident.get("reported_at") or "Timestamp not available"))
 
 st.divider()
-st.markdown("### Nearby hospitals and emergency services")
-st.caption(f"Search location: {location_text or location} · nearest first · straight-line distance estimate. Public directory entries do not confirm live availability or dispatch readiness.")
-if lat is None or lon is None:
-    st.warning("This incident has no usable coordinates. Reopen the report and enter its location before searching nearby services.")
-else:
+# Fetch public emergency-station leads for the separate response-stations section below.
+nearby_services = []
+if lat is not None and lon is not None:
     try:
-        with st.spinner("Searching public service directories near the incident…"):
-            nearby_services = _nearby_public_services(float(lat), float(lon))
-        if nearby_services:
-            for service in nearby_services:
-                service_cols = st.columns([3, 1, 2])
-                service_cols[0].markdown(f"**{service['name']}**")
-                service_cols[0].caption(service["type"])
-                service_cols[1].markdown(f"{service['distance_km']:.1f} km")
-                service_cols[2].markdown(service["phone"] if service["phone"] else "Contact number not listed")
-                if service["phone"]:
-                    service_cols[2].caption("Publicly listed number; call to confirm.")
-            st.caption("Source: OpenStreetMap public directory. Contact details are displayed only when listed; they are not independently phone-verified by ResQ-AI.")
-        else:
-            st.warning("No nearby hospitals or emergency-service locations were found in the public directory within 25 km. Contact local emergency services directly.")
+        nearby_services = _nearby_public_services(float(lat), float(lon))
     except Exception:
-        st.warning("The public service directory could not be reached right now. No facilities or phone numbers have been invented. Please contact local emergency services directly.")
+        nearby_services = []
 
-st.markdown("### Nearby hospitals and contact details")
-st.caption("India hospital reference directory · nearest first · straight-line distance, not driving time. These listings do not confirm current opening status, emergency capability, or available beds.")
+st.markdown("### Major nearby hospitals with listed contacts")
+st.caption("Major hospital records with a phone number listed in the public reference directory · nearest first. Numbers have not been independently phone-verified; live emergency capability and bed availability are unknown.")
 if lat is None or lon is None:
     st.warning("This incident has no usable coordinates, so nearby hospitals cannot be searched.")
 else:
-    with st.spinner("Searching the India hospital directory near the incident…"):
-        nearby_hospitals, hospital_lookup_error = nearby_public_hospitals(lat, lon, limit=10)
+    with st.spinner("Finding major hospitals with listed contact numbers…"):
+        major_hospitals, hospital_lookup_error = nearby_major_hospitals(lat, lon, limit=5)
     if hospital_lookup_error:
         st.warning(f"{hospital_lookup_error} Retry shortly. No hospital names or phone numbers have been fabricated.")
-    elif not nearby_hospitals:
-        st.info("The public hospital directory returned no nearby records for this location. This does not prove that no hospitals exist nearby.")
+    elif not major_hospitals:
+        st.info(
+            "No major hospital records with a listed phone number were found in the public directory "
+            "within 50 km. ResQ-AI will not substitute small clinics or invent contact details. "
+            "Contact local emergency services directly."
+        )
     else:
-        st.caption(f"Showing {len(nearby_hospitals)} hospital/health-facility record(s) within 50 km, sorted by distance.")
-        for hospital in nearby_hospitals:
+        st.caption(
+            f"Showing {len(major_hospitals)} major hospital(s) within 50 km, nearest first, "
+            "with phone numbers listed in the public directory."
+        )
+        for hospital in major_hospitals:
             with st.container(border=True):
-                st.markdown(f"**{hospital.get('name') or 'Unnamed health facility'}**")
+                st.markdown(f"**{hospital.get('name')}**")
                 st.caption(
-                    f"{hospital.get('facility_type') or 'Health facility'} · "
+                    f"{hospital.get('facility_type') or 'Hospital'} · "
                     f"{hospital.get('distance_km', '—')} km away (straight-line)"
                 )
                 address = ", ".join(
@@ -253,13 +245,12 @@ else:
                     ] if part
                 )
                 st.write(address or "Address not listed in the public directory.")
-                phone = str(hospital.get("phone") or "").strip()
-                if phone:
-                    st.write(f"**Contact:** {phone}")
-                    st.link_button("Call hospital", f"tel:{phone}")
-                else:
-                    st.caption("Phone number not listed in the public directory.")
-                st.caption("Source: India hospital reference directory. Call to verify details and availability.")
+                st.write(f"**Listed contact:** {hospital['phone']}")
+                st.link_button("Call hospital", f"tel:{hospital['phone']}")
+                st.caption(
+                    "Source: India hospital reference directory. Listed contact only; "
+                    "not independently verified by ResQ-AI. Call to confirm."
+                )
 
 st.markdown("### Nearby emergency response stations")
 st.caption("Fire, police and ambulance facilities are shown as public-directory leads, not as confirmed dispatch-ready teams.")
