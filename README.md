@@ -59,6 +59,7 @@ Incident reports and operational inventory use Supabase Postgres when configured
 - Scenario Simulator (road blocked, team unavailable, new emergency, hospital squeeze)
 - Analytics (Plotly)
 - ResQ Assistant chatbot grounded in the current incident/resource snapshot
+- Smart Emergency Guidance wizard that gives hazard- and location-specific next steps, with injury/trapped-person considerations and emergency contact direction
 - Hands-free Alexa+-style web voice simulation for ResQ Assistant: automatic spoken replies, continuous turn-taking, follow-ups, and a manual interruption control (browser speech APIs; see `docs/RESQ_VOICE_ASSISTANT.md`)
 - Read-only MCP server over Streamable HTTP for Alexa+ track (incident listing, priority explanations, resource/shelter status, live government alert adapter)
 - Separate Alexa Skills Kit custom-skill starter with voice intents for earthquake, flood, cyclone, fire, heat, emergency help, and preparedness
@@ -98,7 +99,7 @@ Copy `.env.example` to `.env` (optional). Copy `.streamlit/secrets.toml.example`
 | `OPENAI_MODEL` | Default `gpt-4o-mini` |
 | `IMD_API_TOKEN` | Optional official IMD API token; see live data guide |
 | `NDMA_CAP_FEED_URL` | Optional official authorized SACHET/CAP feed URL |
-| `AWS_REGION`, `AWS_BEDROCK_MODEL_ID` | Optional Amazon Bedrock briefing integration |
+| `AWS_REGION`, `AWS_BEDROCK_MODEL_ID` | Optional Amazon Bedrock briefing on the ResQ Assistant page and MCP tool; configure in Streamlit secrets for the app |
 | `RESQ_ROUTING_BASE_URL` | Optional HTTPS OSRM-compatible routing endpoint |
 | `RESQ_SMTP_*`, `RESQ_ALERT_EMAIL_TO` | Optional operator-triggered email notifications |
 

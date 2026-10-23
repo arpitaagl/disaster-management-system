@@ -129,9 +129,11 @@ def find_shelters(center: Any, minimum_spaces: int = 0) -> dict[str, Any]:
 
 def _deterministic_brief(center: Any) -> str:
     metrics = center.metrics()
+    simulated = getattr(center, "demo_mode", True)
     incidents = sorted((row for row in center.incidents if _active(row)), key=lambda row: int(row.get("priority_score") or 0), reverse=True)
     lines = [
         "RESQ-AI RESPONSE BRIEF (deterministic fallback)",
+        f"Data source: {'simulated demo data' if simulated else 'current application session data'}.",
         f"Active incidents: {metrics.get('active_incidents', 0)}; critical incidents: {metrics.get('critical_incidents', 0)}.",
         f"People affected: {metrics.get('people_affected', 0)}; available resources: {metrics.get('available_resources', 0)}.",
         f"Hospital beds reported available: {metrics.get('hospital_beds_available', 0)}; shelter spaces reported available: {metrics.get('shelter_spaces_available', 0)}.",
@@ -142,17 +144,35 @@ def _deterministic_brief(center: Any) -> str:
     return "\n".join(lines)
 
 
-def generate_incident_brief(center: Any) -> dict[str, Any]:
-    """Create a briefing; optionally use Amazon Bedrock when configured, otherwise deterministic text."""
-    model_id = os.getenv("AWS_BEDROCK_MODEL_ID", "").strip()
+def generate_incident_brief(
+    center: Any,
+    model_id: str | None = None,
+    region: str | None = None,
+    aws_access_key_id: str | None = None,
+    aws_secret_access_key: str | None = None,
+    aws_session_token: str | None = None,
+) -> dict[str, Any]:
+    """Create a briefing from the supplied app state, optionally using Bedrock."""
+    model_id = (model_id or os.getenv("AWS_BEDROCK_MODEL_ID", "")).strip()
+    region = (region or os.getenv("AWS_REGION", "us-east-1")).strip()
     if not model_id:
         return {"mode": "deterministic_fallback", "brief": _deterministic_brief(center),
-                "aws_note": "Set AWS_BEDROCK_MODEL_ID and configure AWS credentials to enable the optional Amazon Bedrock Converse integration."}
+                "aws_note": "Add AWS_BEDROCK_MODEL_ID and AWS_REGION to Streamlit secrets, then configure AWS credentials to enable Amazon Bedrock."}
     try:
         import boto3
-        response = boto3.client("bedrock-runtime", region_name=os.getenv("AWS_REGION", "us-east-1")).converse(
+        simulated = getattr(center, "demo_mode", True)
+        source_note = "simulated demo data" if simulated else "the current application session data"
+        credentials = {}
+        if aws_access_key_id and aws_secret_access_key:
+            credentials = {
+                "aws_access_key_id": aws_access_key_id,
+                "aws_secret_access_key": aws_secret_access_key,
+            }
+            if aws_session_token:
+                credentials["aws_session_token"] = aws_session_token
+        response = boto3.client("bedrock-runtime", region_name=region, **credentials).converse(
             modelId=model_id,
-            system=[{"text": "You are a disaster-response briefing assistant. Use only supplied simulated data. Do not invent facts, claim live feeds, or authorize dispatch. Clearly state uncertainty and that a human coordinator must decide."}],
+            system=[{"text": f"You are a disaster-response briefing assistant. Use only supplied {source_note}. Do not invent facts, claim live feeds, or authorize dispatch. Clearly state uncertainty and that a human coordinator must decide. Deterministic priority scores in the input must not be changed."}],
             messages=[{"role": "user", "content": [{"text": _deterministic_brief(center)}]}],
             inferenceConfig={"maxTokens": 500, "temperature": 0.1},
         )
@@ -160,8 +180,8 @@ def generate_incident_brief(center: Any) -> dict[str, Any]:
         brief = "\n".join(str(item.get("text", "")) for item in content if item.get("text"))
         if not brief.strip():
             raise RuntimeError("Empty Bedrock response")
-        return {"mode": "amazon_bedrock", "model_id": model_id, "brief": brief,
-                "note": "AI-generated briefing based only on the supplied simulated data; coordinator review required."}
+        return {"mode": "amazon_bedrock", "model_id": model_id, "region": region, "brief": brief,
+                "note": f"AI-generated briefing based only on {source_note}; coordinator review required."}
     except Exception:
         return {"mode": "deterministic_fallback", "brief": _deterministic_brief(center),
                 "aws_note": "Amazon Bedrock was configured but unavailable. Returned a deterministic briefing instead."}
