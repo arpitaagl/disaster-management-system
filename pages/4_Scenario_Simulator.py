@@ -418,25 +418,13 @@ if response_stations:
 else:
     if service_lookup_error:
         st.warning(
-            f"{service_lookup_error} The app tried multiple public Overpass mirrors. "
-            "This is a temporary directory lookup failure, not proof that services are absent."
+            "Nearby rescue listings could not be loaded from the public directories right now. "
+            "No teams or contact details have been invented. Please retry shortly or contact local emergency authorities."
         )
-        if lat is not None and lon is not None:
-            osm_map_url = f"https://www.openstreetmap.org/#map=12/{float(lat)}/{float(lon)}"
-            st.link_button(
-                "Open OpenStreetMap near this incident",
-                osm_map_url,
-                use_container_width=True,
-            )
-            st.caption(
-                "The map opens at the reported incident location. Rescue listings depend on "
-                "what OpenStreetMap contributors have mapped; verify any contact details before relying on them."
-            )
     else:
         st.info(
-            "The OpenStreetMap lookup succeeded but returned no matching rescue listings within 50 km. "
-            "Coverage may be incomplete. Use the map/source search or contact local emergency authorities directly; "
-            "this is not proof that services are absent."
+            "No matching rescue listings were returned within 50 km of this incident. "
+            "Public map coverage may be incomplete; this does not prove that rescue services are absent."
         )
 
 if is_unclassified:
