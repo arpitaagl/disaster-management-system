@@ -1896,23 +1896,6 @@ def render_sidebar(center: CommandCenter) -> None:
 
 def render_header(center: CommandCenter, subtitle: str, *, search_enabled: bool = False) -> None:
     ai_class = "ok" if "Active" in center.ai_mode else "warn"
-    from pathlib import Path
-    import base64
-
-    icon_path = Path(__file__).resolve().parents[1] / "assets" / "resq-chatbot-icon.png"
-    icon_src = "data:image/png;base64," + base64.b64encode(icon_path.read_bytes()).decode("ascii")
-    st.markdown(
-        f"""
-        <style>
-        .st-key-rx-assistant-fab div[data-testid="stPageLink"] {{ position:fixed !important; top:1rem !important; right:1.5rem !important; z-index:1000002 !important; width:58px !important; height:58px !important; }}
-        .st-key-rx-assistant-fab div[data-testid="stPageLink"] a {{ width:58px !important; height:58px !important; padding:0 !important; border:0 !important; border-radius:50% !important; overflow:hidden !important; background:url('{icon_src}') center/cover no-repeat !important; box-shadow:0 6px 18px rgba(15,23,42,.25) !important; }}
-        .st-key-rx-assistant-fab div[data-testid="stPageLink"] a > div {{ display:none !important; }}
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
-    with st.container(key="rx-assistant-fab"):
-        st.page_link("pages/6_ResQ_Assistant.py", label="", icon="🤖", help="Open ResQ Assistant chat", width="content")
     if search_enabled:
         with st.container(key="resq-global-search"):
             search_col, _ = st.columns([.58, .42], gap="small")
