@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import math
-import re
 import requests
 import streamlit as st
 
 from components.session import get_center, persist
 from components.theme import page_setup, render_header, render_sidebar
-from core.official_directory import nearby_major_hospitals, nearby_official_ndrf_units
+from core.official_directory import nearby_major_hospitals
+from core.rescue_directory import nearby_rescue_listings
 
 page_setup("Scenario Simulator")
 
@@ -60,188 +60,10 @@ def _distance_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     return radius * 2 * math.atan2(math.sqrt(value), math.sqrt(max(0.0, 1.0 - value)))
 
 
-@st.cache_data(ttl=300, show_spinner=False)
+@st.cache_data(ttl=900, show_spinner=False)
 def _nearby_public_services(lat: float, lon: float, radius_m: int = 50000) -> tuple[list[dict], str | None]:
-    """Find nearby mapped rescue-related listings, tolerating individual Overpass outages."""
-    if not (-90 <= float(lat) <= 90 and -180 <= float(lon) <= 180):
-        return [], "Incident coordinates are outside valid latitude/longitude ranges."
-
-    # Include both correctly tagged rescue services and named NDRF/SDRF/rescue
-    # organizations because OSM contributors do not use one consistent tagging scheme.
-    query = f"""
-    [out:json][timeout:25];
-    (
-      nwr(around:{radius_m},{lat},{lon})[emergency~"^(rescue|rescue_station|rescue_service|lifeguard|mountain_rescue|water_rescue_station|water_rescue)$"];
-      nwr(around:{radius_m},{lat},{lon})[amenity="rescue_station"];
-      nwr(around:{radius_m},{lat},{lon})[rescue="yes"];
-      nwr(around:{radius_m},{lat},{lon})[name~"NDRF|SDRF|rescue|disaster response|civil defence|civil defense",i];
-    );
-    out center tags;
-    """
-
-    headers = {
-        "User-Agent": "ResQ-AI public rescue directory/1.0",
-        "Accept": "application/json",
-    }
-    # Public Overpass servers are volunteer-run and can be overloaded. Give
-    # each mirror enough time and continue to the next if one is slow.
-    endpoints = (
-        "https://overpass-api.de/api/interpreter",
-        "https://overpass.kumi.systems/api/interpreter",
-        "https://overpass.private.coffee/api/interpreter",
-        "https://overpass.nchc.org.tw/api/interpreter",
-    )
-    payload = None
-    last_error = "No public OpenStreetMap query endpoint returned usable data."
-    for endpoint in endpoints:
-        try:
-            response = requests.post(endpoint, data={"data": query}, headers=headers, timeout=(4, 12))
-            response.raise_for_status()
-            candidate = response.json()
-            if isinstance(candidate, dict) and isinstance(candidate.get("elements"), list):
-                payload = candidate
-                break
-            last_error = "An OpenStreetMap query endpoint returned an unexpected response."
-        except (requests.RequestException, ValueError, TypeError) as post_exc:
-            # Try GET on the same public mirror: some hosting/proxy paths block POST.
-            try:
-                response = requests.get(endpoint, params={"data": query}, headers=headers, timeout=(4, 12))
-                response.raise_for_status()
-                candidate = response.json()
-                if isinstance(candidate, dict) and isinstance(candidate.get("elements"), list):
-                    payload = candidate
-                    break
-                last_error = "An OpenStreetMap query endpoint returned an unexpected response."
-            except (requests.RequestException, ValueError, TypeError) as get_exc:
-                last_error = f"OpenStreetMap lookup failed (POST {type(post_exc).__name__}; GET {type(get_exc).__name__})."
-
-    if payload is None:
-        # Overpass can be unreachable from hosted app environments. Fall back to
-        # the official NDRF unit directory rather than showing only a connection error.
-        try:
-            units, unit_error = nearby_official_ndrf_units(lat, lon, limit=7)
-        except Exception as exc:
-            units, unit_error = [], f"Official NDRF fallback failed ({type(exc).__name__})."
-        fallback = [
-            {
-                "name": unit.get("name") or "NDRF unit",
-                "type": "Official NDRF unit directory",
-                "distance_km": float(unit.get("distance_km") or 0),
-                "phone": unit.get("phone") or "",
-                "control_room": unit.get("control_room") or "",
-                "email": unit.get("email") or "",
-                "address": unit.get("address") or "",
-                "website": "",
-                "source": "Official NDRF public directory",
-                "source_url": unit.get("source_url") or "https://ndrf.gov.in/en/ndrf-units",
-                "lat": unit.get("lat"),
-                "lon": unit.get("lon"),
-            }
-            for unit in units if unit.get("distance_km") is not None and float(unit["distance_km"]) <= 50
-        ]
-        if fallback:
-            return sorted(fallback, key=lambda row: row["distance_km"])[:7], None
-        return [], f"{last_error} {unit_error or 'No official NDRF fallback records were available.'}"
-
-    labels = {
-        "rescue_station": "Rescue station",
-        "rescue_service": "Rescue service",
-        "ambulance_rendezvous_point": "Rescue service",
-        "lifeguard": "Lifeguard / water rescue",
-        "mountain_rescue": "Mountain rescue",
-        "water_rescue_station": "Water rescue station",
-        "water_rescue": "Water rescue service",
-        "rescue": "Rescue team",
-    }
-    results = []
-    seen = set()
-    for item in payload.get("elements", []):
-        tags = item.get("tags") or {}
-        coords = item if item.get("lat") is not None else (item.get("center") or {})
-        if coords.get("lat") is None or coords.get("lon") is None:
-            continue
-
-        name = str(tags.get("name") or tags.get("official_name") or tags.get("operator") or "").strip()
-        kind = next(
-            (str(tags.get(key) or "") for key in ("emergency", "amenity", "rescue")
-             if str(tags.get(key) or "") in labels),
-            "",
-        )
-        # Name-matched NDRF/SDRF/civil-defence listings may not have rescue tags.
-        if not kind and re.search(
-            r"\b(NDRF|SDRF|rescue|disaster response|civil defence|civil defense)\b",
-            name,
-            flags=re.IGNORECASE,
-        ):
-            kind = "rescue"
-        if not kind:
-            continue
-
-        service_type = labels[kind]
-        element_type = str(item.get("type") or "node")
-        element_id = item.get("id")
-        if not name:
-            name = f"Unnamed {service_type.lower()} (OSM {element_id})"
-        try:
-            service_lat, service_lon = float(coords["lat"]), float(coords["lon"])
-            distance = _distance_km(lat, lon, service_lat, service_lon)
-        except (TypeError, ValueError):
-            continue
-        phone = str(tags.get("contact:phone") or tags.get("phone") or tags.get("contact:mobile") or "").strip()
-        key = (element_type, str(element_id or ""))
-        if key in seen:
-            continue
-        seen.add(key)
-        address_parts = [
-            " ".join(part for part in [str(tags.get("addr:housenumber") or "").strip(), str(tags.get("addr:street") or "").strip()] if part),
-            str(tags.get("addr:suburb") or tags.get("addr:neighbourhood") or "").strip(),
-            str(tags.get("addr:city") or tags.get("addr:town") or tags.get("addr:village") or "").strip(),
-            str(tags.get("addr:district") or "").strip(),
-            str(tags.get("addr:state") or "").strip(),
-            str(tags.get("addr:postcode") or "").strip(),
-        ]
-        address = ", ".join(part for part in address_parts if part)
-        source_url = f"https://www.openstreetmap.org/{element_type}/{element_id}" if element_id else "https://www.openstreetmap.org/"
-        results.append({
-            "name": name,
-            "type": service_type,
-            "distance_km": distance,
-            "phone": phone,
-            "address": address,
-            "website": str(tags.get("contact:website") or tags.get("website") or "").strip(),
-            "source": "OpenStreetMap public directory",
-            "source_url": source_url,
-            "lat": service_lat,
-            "lon": service_lon,
-        })
-    if results:
-        return sorted(results, key=lambda row: row["distance_km"])[:7], None
-
-    # A valid Overpass response can still contain no rescue tags for an area.
-    try:
-        units, unit_error = nearby_official_ndrf_units(lat, lon, limit=7)
-    except Exception as exc:
-        units, unit_error = [], f"Official NDRF fallback failed ({type(exc).__name__})."
-    fallback = [
-        {
-            "name": unit.get("name") or "NDRF unit",
-            "type": "Official NDRF unit directory",
-            "distance_km": float(unit.get("distance_km") or 0),
-            "phone": unit.get("phone") or "",
-            "control_room": unit.get("control_room") or "",
-            "email": unit.get("email") or "",
-            "address": unit.get("address") or "",
-            "website": "",
-            "source": "Official NDRF public directory",
-            "source_url": unit.get("source_url") or "https://ndrf.gov.in/en/ndrf-units",
-            "lat": unit.get("lat"),
-            "lon": unit.get("lon"),
-        }
-        for unit in units if unit.get("distance_km") is not None and float(unit["distance_km"]) <= 50
-    ]
-    if fallback:
-        return sorted(fallback, key=lambda row: row["distance_km"])[:7], None
-    return [], unit_error or None
+    """Find real nearby rescue-related directory listings without Overpass or NDRF HTML scraping."""
+    return nearby_rescue_listings(lat, lon, limit=7)
 
 active_incidents = [
     incident for incident in center.incidents
@@ -379,8 +201,8 @@ else:
 
 st.markdown("### Nearby rescue teams")
 st.caption(
-    "Up to 7 nearby rescue-related listings ranked by distance from the reported incident coordinates. OpenStreetMap is used first; the official NDRF directory is the fallback if OSM is unavailable or has no matching entries. "
-    "These are public-directory leads, not confirmed dispatch-ready teams. A phone number appears only when mapped."
+    "Up to 7 nearby rescue and disaster-response listings, ranked by distance from the reported incident coordinates. Records are sourced from public place listings; contact details appear only when published. "
+    "These are directory leads, not confirmed dispatch-ready teams."
 )
 response_station_types = {
     "Rescue team", "Rescue station", "Rescue service",
