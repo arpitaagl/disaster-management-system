@@ -63,7 +63,13 @@ def _query_hospitals(lat: float, lon: float) -> list[dict[str, Any]]:
             "name": name,
             "lat": hlat,
             "lon": hlon,
-            "address": str(attrs.get("address") or attrs.get("locality") or "").strip(),
+            "address": ", ".join(dict.fromkeys(
+                part for part in [
+                    str(attrs.get("address") or "").strip(),
+                    str(attrs.get("locality") or "").strip(),
+                    str(attrs.get("posatalcode") or "").strip(),
+                ] if part
+            )),
             "district": str(attrs.get("district_name") or "").strip(),
             "state": str(attrs.get("state_name") or "").strip(),
             "phone": str(attrs.get("landline_number") or "").strip(),
