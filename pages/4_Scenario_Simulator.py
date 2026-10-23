@@ -6,7 +6,7 @@ import streamlit as st
 
 from components.session import get_center, persist
 from components.theme import page_setup, render_header, render_sidebar
-from core.official_directory import nearby_major_hospitals
+from core.official_directory import nearby_major_hospitals, nearby_official_ndrf_units
 
 page_setup("Scenario Simulator")
 
@@ -359,6 +359,39 @@ else:
             "Coverage may be incomplete. Use the map/source search or contact local emergency authorities directly; "
             "this is not proof that services are absent."
         )
+
+st.markdown("### Official NDRF units from government website")
+st.caption(
+    "Live lookup of the public NDRF unit directory. Units are ranked by geocoded headquarters address; "
+    "this is official contact/location information, not a live feed of team positions or availability."
+)
+if lat is not None and lon is not None:
+    with st.spinner("Loading official NDRF unit directory…"):
+        ndrf_units, ndrf_error = nearby_official_ndrf_units(lat, lon, limit=5)
+    if ndrf_error:
+        st.warning(f"{ndrf_error} The official directory could not be used for this lookup; retry shortly.")
+    elif ndrf_units:
+        st.caption(f"Showing {len(ndrf_units)} nearest geocoded unit record(s) from the official NDRF website.")
+        for unit in ndrf_units:
+            with st.container(border=True):
+                st.markdown(f"**{unit['name']}**")
+                st.caption(f"Official NDRF unit · {unit['distance_km']:.1f} km from incident (straight-line to geocoded address)")
+                st.write(unit["address"])
+                if unit.get("phone"):
+                    st.write(f"**Listed telephone:** {unit['phone']}")
+                if unit.get("control_room"):
+                    st.write(f"**Control room:** {unit['control_room']}")
+                if unit.get("email"):
+                    st.write(f"**Email:** {unit['email']}")
+                st.markdown(f"[Open official NDRF directory]({unit['source_url']})")
+        st.warning(
+            "These are public unit-directory contacts, not confirmation that a rescue team is currently nearby, "
+            "available, or dispatched. Call the listed control room to verify operational status."
+        )
+    else:
+        st.info("The official NDRF directory returned no units with geocodable addresses for this lookup.")
+else:
+    st.info("Add valid incident coordinates to rank official NDRF units by distance.")
 
 st.markdown("### Nearest rescue teams")
 st.caption(
