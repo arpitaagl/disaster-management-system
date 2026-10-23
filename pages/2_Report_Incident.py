@@ -11,7 +11,7 @@ from components.theme import page_setup, render_header, render_sidebar
 from core.config import CITY_LAT, CITY_LON
 from core.persistence import is_configured, save_incident
 from utils.validation import validate_report
-from core.official_directory import nearby_public_hospitals
+from core.official_directory import nearby_major_hospitals
 
 def _geocode_location(address: str) -> tuple[float, float] | None:
     """Convert a user-entered address into latitude/longitude."""
@@ -246,20 +246,20 @@ if submitted:
         else:
             st.warning("No resource assignment is currently available. A coordinator should review the incident.")
 
-        st.markdown("### Nearby hospitals and contact details")
-        st.caption("Public hospital directory · nearest first · straight-line distance, not driving time. Phone numbers are shown only when listed by the source; current bed capacity and emergency availability are not confirmed.")
+        st.markdown("### Major nearby hospitals with listed contacts")
+        st.caption("Major hospital records with a phone number listed in the public reference directory · nearest first. Numbers have not been independently phone-verified; live emergency capability and bed availability are unknown.")
         with st.spinner("Searching the public hospital directory near this incident…"):
-            nearby_hospitals, hospital_lookup_error = nearby_public_hospitals(lat, lon, limit=10)
+            nearby_hospitals, hospital_lookup_error = nearby_major_hospitals(lat, lon, limit=5)
 
         if hospital_lookup_error:
             st.warning(f"{hospital_lookup_error} Please retry shortly. No hospital names or phone numbers have been fabricated.")
         elif not nearby_hospitals:
             st.info("No hospital records were returned near this location by the public directory. This does not prove that no hospitals exist nearby.")
         else:
-            st.caption(f"Showing {len(nearby_hospitals)} public directory record(s) within the directory search radius.")
+            st.caption(f"Showing up to five major hospitals with listed contact numbers; fewer are shown if records do not meet the filters.")
             for hospital in nearby_hospitals:
                 with st.container(border=True):
-                    st.markdown(f"**{hospital.get('name') or 'Unnamed health facility'}**")
+                    st.markdown(f"**{hospital.get('name')}**")
                     st.caption(
                         f"{hospital.get('facility_type') or 'Health facility'} · "
                         f"{hospital.get('distance_km', '—')} km away (straight-line)"
@@ -271,12 +271,12 @@ if submitted:
                     st.write(location_label or "Address not listed in the public directory.")
                     phone = str(hospital.get("phone") or "").strip()
                     if phone:
-                        st.write(f"**Contact:** {phone}")
+                        st.write(f"**Listed contact:** {phone}")
                         if any(ch.isdigit() for ch in phone):
                             st.link_button("Call hospital", f"tel:{phone}", use_container_width=False)
                     else:
                         st.caption("Phone number not listed in the public directory.")
-                    st.caption("Source: India hospital reference directory · Call to verify details and availability.")
+                    st.caption("Source: India hospital reference directory. Listed contact only; not independently verified by ResQ-AI. Call to confirm.")
 
         with st.expander("View extracted structured data (JSON)", expanded=False):
             st.caption("Technical view for debugging and review. This is data, not executable code.")
