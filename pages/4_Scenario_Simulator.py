@@ -61,55 +61,61 @@ def _distance_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 
 @st.cache_data(ttl=300, show_spinner=False)
 def _nearby_public_services(lat: float, lon: float, radius_m: int = 20000) -> tuple[list[dict], str | None]:
-    """Find mapped emergency facilities and distinguish empty results from lookup outages."""
-    query = f"""
-    [out:json][timeout:10];
-    (
-      nwr(around:{radius_m},{lat},{lon})[emergency~"^(rescue|rescue_station|rescue_service|lifeguard|mountain_rescue|water_rescue_station|water_rescue)$"];
-      nwr(around:{radius_m},{lat},{lon})[amenity~"^(rescue_station)$"];
-      nwr(around:{radius_m},{lat},{lon})[rescue="yes"];
-    );
-    out center tags;
-    """
+    """Find nearby mapped rescue-related listings, tolerating individual Overpass outages."""
     if not (-90 <= float(lat) <= 90 and -180 <= float(lon) <= 180):
         return [], "Incident coordinates are outside valid latitude/longitude ranges."
 
-    headers = {"User-Agent": "ResQ-AI public emergency service directory/1.0 (disaster response prototype; contact: project maintainers)"}
-    payload = None
-    last_error = "No Overpass endpoint returned usable data."
-    # Overpass is a volunteer-run public service. Try several public mirrors so
-    # one busy/unavailable endpoint does not make the whole section empty.
+    # Include both correctly tagged rescue services and named NDRF/SDRF/rescue
+    # organizations because OSM contributors do not use one consistent tagging scheme.
+    query = f"""
+    [out:json][timeout:25];
+    (
+      nwr(around:{radius_m},{lat},{lon})[emergency~"^(rescue|rescue_station|rescue_service|lifeguard|mountain_rescue|water_rescue_station|water_rescue)$"];
+      nwr(around:{radius_m},{lat},{lon})[amenity="rescue_station"];
+      nwr(around:{radius_m},{lat},{lon})[rescue="yes"];
+      nwr(around:{radius_m},{lat},{lon})[name~"NDRF|SDRF|rescue|disaster response|civil defence|civil defense",i];
+    );
+    out center tags;
+    """
+
+    headers = {
+        "User-Agent": "ResQ-AI public rescue directory/1.0",
+        "Accept": "application/json",
+    }
+    # Public Overpass servers are volunteer-run and can be overloaded. Give
+    # each mirror enough time and continue to the next if one is slow.
     endpoints = (
         "https://overpass-api.de/api/interpreter",
         "https://overpass.kumi.systems/api/interpreter",
+        "https://overpass.private.coffee/api/interpreter",
+        "https://overpass.nchc.org.tw/api/interpreter",
     )
+    payload = None
+    last_error = "No public OpenStreetMap query endpoint returned usable data."
     for endpoint in endpoints:
         try:
             response = requests.post(
-                endpoint, data={"data": query}, headers=headers, timeout=(3, 12)
+                endpoint,
+                data={"data": query},
+                headers=headers,
+                timeout=(5, 35),
             )
             response.raise_for_status()
             candidate = response.json()
             if isinstance(candidate, dict) and isinstance(candidate.get("elements"), list):
                 payload = candidate
                 break
-            last_error = "An Overpass endpoint returned an unexpected response."
+            last_error = "An OpenStreetMap query endpoint returned an unexpected response."
         except (requests.RequestException, ValueError, TypeError) as exc:
             last_error = f"Public OpenStreetMap lookup temporarily failed ({type(exc).__name__})."
-            continue
+
     if payload is None:
         return [], last_error
 
     labels = {
-        "police": "Police station",
-        "fire_station": "Fire station",
-        "ambulance_station": "Ambulance station",
-        "ambulance_centre": "Ambulance centre",
         "rescue_station": "Rescue station",
         "rescue_service": "Rescue service",
-        "ambulance_rendezvous_point": "Ambulance point",
-        "emergency_unit": "Emergency unit",
-        "ambulance": "Ambulance service",
+        "ambulance_rendezvous_point": "Rescue service",
         "lifeguard": "Lifeguard / water rescue",
         "mountain_rescue": "Mountain rescue",
         "water_rescue_station": "Water rescue station",
@@ -124,19 +130,25 @@ def _nearby_public_services(lat: float, lon: float, radius_m: int = 20000) -> tu
         if coords.get("lat") is None or coords.get("lon") is None:
             continue
 
-        # Keep the specific emergency tag instead of accidentally labelling a
-        # facility from an unrelated tag; support both named and unnamed mapped sites.
+        name = str(tags.get("name") or tags.get("official_name") or tags.get("operator") or "").strip()
         kind = next(
-            (str(tags.get(key) or "") for key in ("amenity", "emergency", "healthcare", "rescue")
+            (str(tags.get(key) or "") for key in ("emergency", "amenity", "rescue")
              if str(tags.get(key) or "") in labels),
             "",
         )
+        # Name-matched NDRF/SDRF/civil-defence listings may not have rescue tags.
+        if not kind and __import__("re").search(
+            r"\b(NDRF|SDRF|rescue|disaster response|civil defence|civil defense)\b",
+            name,
+            flags=__import__("re").IGNORECASE,
+        ):
+            kind = "rescue"
         if not kind:
             continue
+
         service_type = labels[kind]
         element_type = str(item.get("type") or "node")
         element_id = item.get("id")
-        name = str(tags.get("name") or tags.get("official_name") or tags.get("operator") or "").strip()
         if not name:
             name = f"Unnamed {service_type.lower()} (OSM {element_id})"
         try:
@@ -145,7 +157,7 @@ def _nearby_public_services(lat: float, lon: float, radius_m: int = 20000) -> tu
         except (TypeError, ValueError):
             continue
         phone = str(tags.get("contact:phone") or tags.get("phone") or tags.get("contact:mobile") or "").strip()
-        key = (element_type, str(element_id or ""), service_type)
+        key = (element_type, str(element_id or ""))
         if key in seen:
             continue
         seen.add(key)
