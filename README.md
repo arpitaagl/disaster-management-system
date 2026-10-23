@@ -98,7 +98,7 @@ Copy `.env.example` to `.env` (optional). Copy `.streamlit/secrets.toml.example`
 | `OPENAI_MODEL` | Default `gpt-4o-mini` |
 | `IMD_API_TOKEN` | Optional official IMD API token; see live data guide |
 | `NDMA_CAP_FEED_URL` | Optional official authorized SACHET/CAP feed URL |
-| `AWS_REGION`, `AWS_BEDROCK_MODEL_ID` | Optional Amazon Bedrock briefing integration |
+| `AWS_REGION`, `AWS_BEDROCK_MODEL_ID` | Optional Amazon Bedrock briefing on the ResQ Assistant page and MCP tool; configure in Streamlit secrets for the app |
 | `RESQ_ROUTING_BASE_URL` | Optional HTTPS OSRM-compatible routing endpoint |
 | `RESQ_SMTP_*`, `RESQ_ALERT_EMAIL_TO` | Optional operator-triggered email notifications |
 
