@@ -18,6 +18,37 @@ CSS = """
 
 .resq-chat-overlay { display: none; }
 
+/* Persistent ResQ Assistant avatar launcher, available across app pages. */
+.st-key-resq-floating-avatar {
+  position: fixed !important;
+  right: 24px !important;
+  bottom: 24px !important;
+  z-index: 999999 !important;
+  width: 64px !important;
+}
+.st-key-resq-floating-avatar [data-testid="stButton"] > button {
+  width: 60px !important;
+  min-width: 60px !important;
+  height: 60px !important;
+  min-height: 60px !important;
+  padding: 0 !important;
+  border-radius: 50% !important;
+  border: 2px solid #ffffff !important;
+  background: linear-gradient(145deg, #0f766e, #2457c5) !important;
+  color: #ffffff !important;
+  font-size: 25px !important;
+  box-shadow: 0 8px 24px rgba(15, 35, 60, .28) !important;
+}
+.st-key-resq-floating-avatar [data-testid="stButton"] > button:hover {
+  transform: translateY(-2px) scale(1.03) !important;
+  box-shadow: 0 11px 28px rgba(15, 35, 60, .34) !important;
+}
+.st-key-resq-floating-avatar [data-testid="stButton"] > button:focus-visible {
+  outline: 3px solid #5eead4 !important;
+  outline-offset: 3px !important;
+}
+
+
 :root {
   color-scheme: light;
   --resq-ink: #152238;
@@ -1923,3 +1954,8 @@ def render_header(center: CommandCenter, subtitle: str, *, search_enabled: bool 
         """,
         unsafe_allow_html=True,
     )
+
+    # Keep a compact, accessible avatar launcher available on every page.
+    with st.container(key="resq-floating-avatar"):
+        if st.button("🆘", key="resq_floating_avatar_button", help="Open ResQ Assistant"):
+            st.switch_page("pages/6_ResQ_Assistant.py")
