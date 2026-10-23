@@ -6,6 +6,7 @@ import streamlit as st
 
 from components.session import get_center, persist
 from components.theme import page_setup, render_header, render_sidebar
+from core.official_directory import nearby_public_hospitals
 
 page_setup("Scenario Simulator")
 
@@ -223,6 +224,42 @@ else:
             st.warning("No nearby hospitals or emergency-service locations were found in the public directory within 25 km. Contact local emergency services directly.")
     except Exception:
         st.warning("The public service directory could not be reached right now. No facilities or phone numbers have been invented. Please contact local emergency services directly.")
+
+st.markdown("### Nearby hospitals and contact details")
+st.caption("India hospital reference directory · nearest first · straight-line distance, not driving time. These listings do not confirm current opening status, emergency capability, or available beds.")
+if lat is None or lon is None:
+    st.warning("This incident has no usable coordinates, so nearby hospitals cannot be searched.")
+else:
+    with st.spinner("Searching the India hospital directory near the incident…"):
+        nearby_hospitals, hospital_lookup_error = nearby_public_hospitals(lat, lon, limit=10)
+    if hospital_lookup_error:
+        st.warning(f"{hospital_lookup_error} Retry shortly. No hospital names or phone numbers have been fabricated.")
+    elif not nearby_hospitals:
+        st.info("The public hospital directory returned no nearby records for this location. This does not prove that no hospitals exist nearby.")
+    else:
+        st.caption(f"Showing {len(nearby_hospitals)} hospital/health-facility record(s) within 50 km, sorted by distance.")
+        for hospital in nearby_hospitals:
+            with st.container(border=True):
+                st.markdown(f"**{hospital.get('name') or 'Unnamed health facility'}**")
+                st.caption(
+                    f"{hospital.get('facility_type') or 'Health facility'} · "
+                    f"{hospital.get('distance_km', '—')} km away (straight-line)"
+                )
+                address = ", ".join(
+                    part for part in [
+                        str(hospital.get("address") or "").strip(),
+                        str(hospital.get("district") or "").strip(),
+                        str(hospital.get("state") or "").strip(),
+                    ] if part
+                )
+                st.write(address or "Address not listed in the public directory.")
+                phone = str(hospital.get("phone") or "").strip()
+                if phone:
+                    st.write(f"**Contact:** {phone}")
+                    st.link_button("Call hospital", f"tel:{phone}")
+                else:
+                    st.caption("Phone number not listed in the public directory.")
+                st.caption("Source: India hospital reference directory. Call to verify details and availability.")
 
 st.markdown("### Nearby emergency response stations")
 st.caption("Fire, police and ambulance facilities are shown as public-directory leads, not as confirmed dispatch-ready teams.")
