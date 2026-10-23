@@ -277,6 +277,7 @@ if submitted:
                     else:
                         st.caption("Phone number not listed in the public directory.")
                     st.caption("Source: India hospital reference directory. Listed contact only; not independently verified by ResQ-AI. Call to confirm.")
+                    st.markdown("[Open source directory](https://livingatlas.esri.in/server/rest/services/LivingAtlas/IND_Hospital_Directory/MapServer/0)")
 
         with st.expander("View extracted structured data (JSON)", expanded=False):
             st.caption("Technical view for debugging and review. This is data, not executable code.")
