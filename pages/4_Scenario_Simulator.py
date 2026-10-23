@@ -404,20 +404,20 @@ elif resource_rows:
                 capability_text = ", ".join(str(item) for item in capabilities)
             else:
                 capability_text = str(capabilities).strip()
-                if resource["capacity"] is not None:
-                    st.write(f"**Recorded capacity:** {resource['capacity']}")
-                if capability_text:
-                    st.write(f"**Capabilities:** {capability_text}")
-                if resource["phone"]:
-                    st.write(f"**Listed contact:** {resource['phone']}")
-                    st.link_button(
-                        "Call rescue team",
-                        f"tel:{resource['phone']}",
-                        key=f"call_rescue_{resource['id'] or resource['name']}",
-                    )
-                else:
-                    st.write("**Listed contact:** Not available")
-                st.caption("Source: connected resource inventory. Confirm status and location before dispatch.")
+            if resource["capacity"] is not None:
+                st.write(f"**Recorded capacity:** {resource['capacity']}")
+            if capability_text:
+                st.write(f"**Capabilities:** {capability_text}")
+            if resource["phone"]:
+                st.write(f"**Listed contact:** {resource['phone']}")
+                st.link_button(
+                    "Call rescue team",
+                    f"tel:{resource['phone']}",
+                    key=f"call_rescue_{resource['id'] or resource['name']}",
+                )
+            else:
+                st.write("**Listed contact:** Not available")
+            st.caption("Source: connected resource inventory. Confirm status and location before dispatch.")
     st.warning(
         "Distance is straight-line, not road travel distance. Confirm the team's status, location, capability, "
         "and availability with the responsible coordinator before dispatch."
