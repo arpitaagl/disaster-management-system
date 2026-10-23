@@ -67,15 +67,41 @@ function renderResponse(text){
 }
 function setActive(v){active=v;startBtn.disabled=v;stopBtn.disabled=!v;interruptBtn.disabled=!v;orb.classList.toggle("active",v)}
 function listen(){if(!active||!recognition||listening||speaking)return;finalText="";try{recognition.start()}catch(_){restartPending=true}}
+// Prefer a warm, natural-sounding feminine English voice when the browser provides one.
+const FEMALE_VOICE_PREFERENCES=[
+ "Microsoft Aria","Microsoft Jenny","Google UK English Female","Google US English",
+ "Samantha","Ava","Allison","Serena","Zira","Karen","Moira","Tessa","Fiona","Female"
+];
+function chooseAssistantVoice(){
+ if(!("speechSynthesis"in window))return null;
+ const voices=window.speechSynthesis.getVoices()||[];
+ const english=voices.filter(v=>/^en(-|$)/i.test(v.lang||""));
+ const pool=english.length?english:voices;
+ for(const preferred of FEMALE_VOICE_PREFERENCES){
+  const match=pool.find(v=>v.name.toLowerCase().includes(preferred.toLowerCase()));
+  if(match)return match;
+ }
+ // Browser voice names are inconsistent; prefer a voice explicitly marked feminine,
+ // then an English voice, and otherwise let the browser use its default.
+ return pool.find(v=>/female|woman|aria|jenny|samantha|zira|susan|hazel/i.test(v.name))
+  ||english[0]||null;
+}
 function speak(text){
  if(!text||!("speechSynthesis"in window)){if(active){setStatus("Answer ready. Keep talking when ready.");listen()}return}
  window.speechSynthesis.cancel();const clean=text.replaceAll("**","").replaceAll("*","").replaceAll("_","");
- const u=new SpeechSynthesisUtterance(clean);u.lang="en-IN";u.rate=1;u.pitch=1;
+ const u=new SpeechSynthesisUtterance(clean);
+ u.lang="en-US";
+ u.rate=0.96;
+ u.pitch=1.08;
+ const voice=chooseAssistantVoice();
+ if(voice){u.voice=voice;u.lang=voice.lang||"en-US"}
  u.onstart=()=>{speaking=true;setStatus("Speaking… tap Interrupt / ask now to cut in.")};
  u.onend=()=>{speaking=false;if(active){setStatus("Listening for your next question…");listen()}else setStatus("Response complete.")};
  u.onerror=()=>{speaking=false;if(active){setStatus("Answer is shown. Ask your next question.");listen()}};
  window.speechSynthesis.speak(u)
 }
+// Some browsers load their voice list asynchronously.
+if("speechSynthesis"in window)window.speechSynthesis.onvoiceschanged=()=>chooseAssistantVoice();
 if(!Recognition){startBtn.disabled=true;setStatus("Speech recognition is unavailable. Open this page in a recent Chrome or Edge browser.")}
 else{
  recognition=new Recognition();recognition.lang="en-IN";recognition.continuous=false;recognition.interimResults=true;
