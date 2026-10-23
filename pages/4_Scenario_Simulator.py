@@ -205,14 +205,7 @@ readiness_cols[1].metric("Nearby hospital listings", hospital_directory_count)
 
 if center.shelters:
     st.metric("Verified shelter records", len(center.shelters))
-else:
-    st.info("Shelter inventory is not connected. No verified shelter records are available to count.")
 
-if not center.resources:
-    st.info(
-        "Operational resource inventory is not connected. Public hospital directory listings are shown above, "
-        "but they do not confirm rescue-team availability, dispatch readiness, or live bed capacity."
-    )
 elif not assignment or not assignment.get("resource_id"):
     st.warning(
         "No eligible nearby resource has been assigned from the currently loaded records. "
@@ -246,8 +239,6 @@ if assignment and (assignment.get("hospital_name") or assignment.get("hospital_i
         )
 if center.shelters and assignment and (assignment.get("shelter_name") or assignment.get("shelter_id")):
     st.write("**Shelter candidate:** " + str(assignment.get("shelter_name") or assignment.get("shelter_id")))
-elif not center.shelters:
-    st.caption("No verified shelter inventory is connected.")
 
 
 # What-if simulations operate on a copy of the current state. They never overwrite
