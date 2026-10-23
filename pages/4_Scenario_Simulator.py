@@ -434,30 +434,41 @@ elif resource_rows:
         st.caption(f"Showing {len(resource_rows)} verified resource record(s), nearest first.")
     for resource in resource_rows:
         with st.container(border=True):
-            rc = st.columns([3, 1, 2])
-            rc[0].markdown(f"**{resource['name']}**")
-            rc[0].caption(f"{resource['type']} · ID {resource['id'] or 'not listed'}")
-            rc[1].markdown(f"{resource['distance_km']:.1f} km")
-            rc[2].markdown(f"**Status:** {resource['status']}")
-            if resource.get("is_demo"):
-                st.caption("SIMULATED DEMO DATA · not a real unit · no dispatch/contact available")
-            details = []
-            if resource["capacity"] is not None:
-                details.append(f"Recorded capacity: {resource['capacity']}")
+            st.markdown(f"**{resource['name']}**")
+            st.caption(
+                f"{resource['type']} · {resource['distance_km']:.1f} km away "
+                f"(straight-line) · ID {resource['id'] or 'not listed'}"
+            )
+            st.write(f"**Status:** {resource['status']}")
             capabilities = resource["capabilities"]
             if isinstance(capabilities, (list, tuple, set)):
                 capability_text = ", ".join(str(item) for item in capabilities)
             else:
                 capability_text = str(capabilities).strip()
-            if capability_text:
-                details.append(f"Capabilities: {capability_text}")
-            if details:
-                st.caption(" · ".join(details))
-            if resource["phone"]:
-                st.write(f"**Listed contact:** {resource['phone']}")
-                st.link_button("Call rescue team", f"tel:{resource['phone']}", key=f"call_rescue_{resource['id'] or resource['name']}")
+            if resource.get("is_demo"):
+                st.write("**Location:** Simulated near the reported incident (demo coordinates)")
+                st.write(f"**Demo capacity:** {resource['capacity']} people/units (simulated)")
+                if capability_text:
+                    st.write(f"**Demo capabilities:** {capability_text}")
+                st.caption(
+                    "SIMULATED DEMO DATA · fictional team · no real phone, dispatch, availability, "
+                    "or response time. Do not use for real-world emergency decisions."
+                )
             else:
-                st.caption("Contact number not listed in the connected inventory.")
+                if resource["capacity"] is not None:
+                    st.write(f"**Recorded capacity:** {resource['capacity']}")
+                if capability_text:
+                    st.write(f"**Capabilities:** {capability_text}")
+                if resource["phone"]:
+                    st.write(f"**Listed contact:** {resource['phone']}")
+                    st.link_button(
+                        "Call rescue team",
+                        f"tel:{resource['phone']}",
+                        key=f"call_rescue_{resource['id'] or resource['name']}",
+                    )
+                else:
+                    st.write("**Listed contact:** Not available")
+                st.caption("Source: connected resource inventory. Confirm status and location before dispatch.")
     st.warning(
         "Distance is straight-line, not road travel distance. Confirm the team's status, location, capability, "
         "and availability with the responsible coordinator before dispatch."
