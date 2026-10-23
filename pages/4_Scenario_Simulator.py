@@ -63,7 +63,7 @@ def _distance_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 def _nearby_public_services(lat: float, lon: float, radius_m: int = 50000) -> tuple[list[dict], str | None]:
     """Find mapped emergency facilities and distinguish empty results from lookup outages."""
     query = f"""
-    [out:json][timeout:7];
+    [out:json][timeout:20];
     (
       nwr(around:{radius_m},{lat},{lon})[amenity~"^(police|fire_station)$"];
       nwr(around:{radius_m},{lat},{lon})[emergency~"^(ambulance_station|fire_station|ambulance_centre|rescue_station|rescue_service|ambulance_rendezvous_point)$"];
