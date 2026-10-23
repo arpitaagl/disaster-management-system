@@ -65,8 +65,10 @@ def _nearby_public_services(lat: float, lon: float, radius_m: int = 25000) -> li
     query = f"""
     [out:json][timeout:8];
     (
-      nwr(around:{radius_m},{lat},{lon})[amenity~"^(hospital|clinic|doctors|police|fire_station)$"];
+      nwr(around:{radius_m},{lat},{lon})[amenity~"^(police|fire_station)$"];
       nwr(around:{radius_m},{lat},{lon})[emergency~"^(ambulance_station|fire_station|ambulance_centre|rescue_station)$"];
+      nwr(around:{radius_m},{lat},{lon})[healthcare~"^(ambulance_station|emergency_unit)$"];
+      nwr(around:{radius_m},{lat},{lon})[emergency="ambulance"][name];
     );
     out center tags;
     """
@@ -90,10 +92,10 @@ def _nearby_public_services(lat: float, lon: float, radius_m: int = 25000) -> li
         return []
 
     labels = {
-        "hospital": "Hospital", "clinic": "Clinic", "doctors": "Medical clinic",
         "police": "Police station", "fire_station": "Fire station",
         "ambulance_station": "Ambulance station", "ambulance_centre": "Ambulance centre",
-        "rescue_station": "Rescue station", "ambulance": "Ambulance service",
+        "rescue_station": "Rescue station", "emergency_unit": "Emergency unit",
+        "ambulance": "Ambulance service",
     }
     results = []
     seen = set()
@@ -105,7 +107,7 @@ def _nearby_public_services(lat: float, lon: float, radius_m: int = 25000) -> li
         coords = item if item.get("lat") is not None else (item.get("center") or {})
         if coords.get("lat") is None or coords.get("lon") is None:
             continue
-        kind = str(tags.get("amenity") or tags.get("emergency") or "emergency service")
+        kind = str(tags.get("amenity") or tags.get("emergency") or tags.get("healthcare") or "emergency service")
         phone = str(tags.get("contact:phone") or tags.get("phone") or tags.get("contact:mobile") or "").strip()
         distance = _distance_km(lat, lon, float(coords["lat"]), float(coords["lon"]))
         service_type = labels.get(kind, kind.replace("_", " ").title())
@@ -113,14 +115,31 @@ def _nearby_public_services(lat: float, lon: float, radius_m: int = 25000) -> li
         if key in seen:
             continue
         seen.add(key)
+        address_parts = [
+            " ".join(part for part in [str(tags.get("addr:housenumber") or "").strip(), str(tags.get("addr:street") or "").strip()] if part),
+            str(tags.get("addr:suburb") or tags.get("addr:neighbourhood") or "").strip(),
+            str(tags.get("addr:city") or tags.get("addr:town") or tags.get("addr:village") or "").strip(),
+            str(tags.get("addr:district") or "").strip(),
+            str(tags.get("addr:state") or "").strip(),
+            str(tags.get("addr:postcode") or "").strip(),
+        ]
+        address = ", ".join(part for part in address_parts if part)
+        element_type = str(item.get("type") or "node")
+        element_id = item.get("id")
+        source_url = f"https://www.openstreetmap.org/{element_type}/{element_id}" if element_id else "https://www.openstreetmap.org/"
         results.append({
             "name": name,
             "type": service_type,
             "distance_km": distance,
             "phone": phone,
+            "address": address,
+            "website": str(tags.get("contact:website") or tags.get("website") or "").strip(),
             "source": "OpenStreetMap public directory",
+            "source_url": source_url,
+            "lat": float(coords["lat"]),
+            "lon": float(coords["lon"]),
         })
-    return sorted(results, key=lambda row: row["distance_km"])[:30]
+    return sorted(results, key=lambda row: row["distance_km"])[:100]
 
 
 active_incidents = [
@@ -251,24 +270,55 @@ else:
                     "Source: India hospital reference directory. Listed contact only; "
                     "not independently verified by ResQ-AI. Call to confirm."
                 )
+                st.markdown("[Open source directory](https://livingatlas.esri.in/server/rest/services/LivingAtlas/IND_Hospital_Directory/MapServer/0)")
 
-st.markdown("### Nearby emergency response stations")
-st.caption("Fire, police and ambulance facilities are shown as public-directory leads, not as confirmed dispatch-ready teams.")
-response_station_types = {"Fire station", "Police station", "Ambulance station", "Ambulance centre", "Rescue station", "Ambulance service"}
+st.markdown("### Nearby emergency response services")
+st.caption(
+    "Up to 10 nearby fire stations, police stations, ambulance stations and rescue listings from "
+    "OpenStreetMap. These are public-directory leads, not confirmed dispatch-ready teams. "
+    "A phone number appears only when the directory lists one."
+)
+response_station_types = {
+    "Fire station", "Police station", "Ambulance station", "Ambulance centre",
+    "Rescue station", "Ambulance service", "Emergency unit",
+}
 response_stations = [
     service for service in (nearby_services if lat is not None and lon is not None and "nearby_services" in locals() else [])
     if service["type"] in response_station_types
 ]
+response_stations = sorted(response_stations, key=lambda row: row["distance_km"])[:10]
 if response_stations:
+    st.caption(f"Showing {len(response_stations)} nearby listing(s), nearest first.")
     for service in response_stations:
-        rc = st.columns([3, 1, 2])
-        rc[0].markdown(f"**{service['name']}**")
-        rc[0].caption(service["type"])
-        rc[1].markdown(f"{service['distance_km']:.1f} km")
-        rc[2].markdown(service["phone"] if service["phone"] else "Contact number not listed")
-    st.caption("These listings do not verify whether a crew is on duty, equipped, or available to dispatch.")
+        with st.container(border=True):
+            rc = st.columns([3, 1, 2])
+            rc[0].markdown(f"**{service['name']}**")
+            rc[0].caption(service["type"])
+            rc[1].markdown(f"{service['distance_km']:.1f} km")
+            if service.get("phone"):
+                rc[2].markdown(f"**Listed phone:** {service['phone']}")
+                rc[2].link_button("Call listing", f"tel:{service['phone']}")
+            else:
+                rc[2].markdown("**Phone:** Not listed")
+            st.write(service.get("address") or "Full street address not available in the public listing.")
+            links = []
+            if service.get("website"):
+                links.append(f"[Website]({service['website']})")
+            if service.get("source_url"):
+                links.append(f"[Source listing]({service['source_url']})")
+            if links:
+                st.markdown(" · ".join(links))
+    st.warning(
+        "OpenStreetMap records are community-maintained and may be incomplete or outdated. "
+        "Call to confirm the number and location. ResQ-AI cannot confirm that any crew is on duty, "
+        "equipped, available, or dispatched."
+    )
 else:
-    st.info("No nearby response stations could be confirmed from the public directory in this lookup. This is not proof that no stations exist. ResQ-AI has no connected live roster to verify individual rescue teams.")
+    st.info(
+        "No nearby emergency-service listings were returned by the public directory for this location. "
+        "This does not prove that no services exist. The live lookup does not provide a verified rescue-team roster."
+    )
+
 verified_resources = [
     resource for resource in center.resources
     if str(resource.get("status") or "").strip().lower() == "available"
