@@ -206,12 +206,12 @@ readiness_cols[1].metric("Nearby hospital listings", hospital_directory_count)
 if center.shelters:
     st.metric("Verified shelter records", len(center.shelters))
 
-elif not assignment or not assignment.get("resource_id"):
+if center.resources and (not assignment or not assignment.get("resource_id")):
     st.warning(
         "No eligible nearby resource has been assigned from the currently loaded records. "
         "Check verified resource coordinates, capabilities, capacity, and current availability."
     )
-else:
+elif center.resources:
     resource_id = assignment.get("resource_id")
     resource_name = assignment.get("resource_name")
     distance = assignment.get("distance_km")
