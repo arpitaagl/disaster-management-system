@@ -90,7 +90,7 @@ def nearby_rescue_listings(lat: Any, lon: Any, limit: int = 7) -> tuple[list[dic
             address = ", ".join(dict.fromkeys(p for p in parts if p))
             found[key] = {
                 "name": name,
-                "type": "Rescue / disaster-response listing",
+                "type": "Rescue service",
                 "distance_km": round(distance, 1),
                 "phone": str(props.get("phone") or props.get("contact:phone") or extra.get("phone") or extra.get("contact:phone") or extra.get("contact:mobile") or "").strip(),
                 "address": address,
