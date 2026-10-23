@@ -111,7 +111,32 @@ def _nearby_public_services(lat: float, lon: float, radius_m: int = 50000) -> tu
             last_error = f"Public OpenStreetMap lookup temporarily failed ({type(exc).__name__})."
 
     if payload is None:
-        return [], last_error
+        # Overpass can be unreachable from hosted app environments. Fall back to
+        # the official NDRF unit directory rather than showing only a connection error.
+        try:
+            units, unit_error = nearby_official_ndrf_units(lat, lon, limit=7)
+        except Exception as exc:
+            units, unit_error = [], f"Official NDRF fallback failed ({type(exc).__name__})."
+        fallback = [
+            {
+                "name": unit.get("name") or "NDRF unit",
+                "type": "Official NDRF unit directory",
+                "distance_km": float(unit.get("distance_km") or 0),
+                "phone": unit.get("phone") or "",
+                "control_room": unit.get("control_room") or "",
+                "email": unit.get("email") or "",
+                "address": unit.get("address") or "",
+                "website": "",
+                "source": "Official NDRF public directory",
+                "source_url": unit.get("source_url") or "https://ndrf.gov.in/en/ndrf-units",
+                "lat": unit.get("lat"),
+                "lon": unit.get("lon"),
+            }
+            for unit in units
+        ]
+        if fallback:
+            return sorted(fallback, key=lambda row: row["distance_km"])[:7], None
+        return [], f"{last_error} {unit_error or 'No official NDRF fallback records were available.'}"
 
     labels = {
         "rescue_station": "Rescue station",
@@ -184,7 +209,34 @@ def _nearby_public_services(lat: float, lon: float, radius_m: int = 50000) -> tu
             "lat": service_lat,
             "lon": service_lon,
         })
-    return sorted(results, key=lambda row: row["distance_km"])[:100], None
+    if results:
+        return sorted(results, key=lambda row: row["distance_km"])[:7], None
+
+    # A valid Overpass response can still contain no rescue tags for an area.
+    try:
+        units, unit_error = nearby_official_ndrf_units(lat, lon, limit=7)
+    except Exception as exc:
+        units, unit_error = [], f"Official NDRF fallback failed ({type(exc).__name__})."
+    fallback = [
+        {
+            "name": unit.get("name") or "NDRF unit",
+            "type": "Official NDRF unit directory",
+            "distance_km": float(unit.get("distance_km") or 0),
+            "phone": unit.get("phone") or "",
+            "control_room": unit.get("control_room") or "",
+            "email": unit.get("email") or "",
+            "address": unit.get("address") or "",
+            "website": "",
+            "source": "Official NDRF public directory",
+            "source_url": unit.get("source_url") or "https://ndrf.gov.in/en/ndrf-units",
+            "lat": unit.get("lat"),
+            "lon": unit.get("lon"),
+        }
+        for unit in units
+    ]
+    if fallback:
+        return sorted(fallback, key=lambda row: row["distance_km"])[:7], None
+    return [], unit_error or None
 
 active_incidents = [
     incident for incident in center.incidents
@@ -322,19 +374,19 @@ else:
 
 st.markdown("### Nearby rescue teams")
 st.caption(
-    "Up to 10 nearby rescue-related listings from OpenStreetMap, ranked by distance from the reported incident coordinates. "
+    "Up to 7 nearby rescue-related listings ranked by distance from the reported incident coordinates. OpenStreetMap is used first; the official NDRF directory is the fallback if OSM is unavailable or has no matching entries. "
     "These are public-directory leads, not confirmed dispatch-ready teams. A phone number appears only when mapped."
 )
 response_station_types = {
     "Rescue team", "Rescue station", "Rescue service",
     "Lifeguard / water rescue", "Mountain rescue",
-    "Water rescue station", "Water rescue service",
+    "Water rescue station", "Water rescue service", "Official NDRF unit directory",
 }
 response_stations = [
     service for service in (nearby_services if lat is not None and lon is not None and "nearby_services" in locals() else [])
     if service["type"] in response_station_types
 ]
-response_stations = sorted(response_stations, key=lambda row: row["distance_km"])[:10]
+response_stations = sorted(response_stations, key=lambda row: row["distance_km"])[:7]
 if response_stations:
     st.caption(f"Showing {len(response_stations)} nearby listing(s), nearest first.")
     for service in response_stations:
@@ -346,6 +398,9 @@ if response_stations:
             if service.get("phone"):
                 rc[2].markdown(f"**Listed phone:** {service['phone']}")
                 rc[2].link_button("Call listing", f"tel:{service['phone']}")
+            elif service.get("control_room"):
+                rc[2].markdown(f"**Control room:** {service['control_room']}")
+                rc[2].link_button("Call control room", f"tel:{service['control_room']}")
             else:
                 rc[2].markdown("**Phone:** Not listed")
             st.write(service.get("address") or "Full street address not available in the public listing.")
@@ -357,9 +412,8 @@ if response_stations:
             if links:
                 st.markdown(" · ".join(links))
     st.warning(
-        "OpenStreetMap records are community-maintained and may be incomplete or outdated. "
-        "Call to confirm the number and location. ResQ-AI cannot confirm that any crew is on duty, "
-        "equipped, available, or dispatched."
+        "These are public-directory locations and contacts, not live team positions. OpenStreetMap records may be incomplete or outdated; NDRF entries are official unit contacts. "
+        "Call to confirm current availability. ResQ-AI cannot confirm that any crew is on duty, equipped, available, or dispatched."
     )
 else:
     if service_lookup_error:
@@ -384,113 +438,6 @@ else:
             "Coverage may be incomplete. Use the map/source search or contact local emergency authorities directly; "
             "this is not proof that services are absent."
         )
-
-st.markdown("### Official NDRF units from government website")
-st.caption(
-    "Live lookup of the public NDRF unit directory. Units are ranked by geocoded headquarters address; "
-    "this is official contact/location information, not a live feed of team positions or availability."
-)
-if lat is not None and lon is not None:
-    with st.spinner("Loading official NDRF unit directory…"):
-        ndrf_units, ndrf_error = nearby_official_ndrf_units(lat, lon, limit=5)
-    if ndrf_error:
-        st.warning(f"{ndrf_error} The official directory could not be used for this lookup; retry shortly.")
-    elif ndrf_units:
-        st.caption(f"Showing {len(ndrf_units)} nearest geocoded unit record(s) from the official NDRF website.")
-        for unit in ndrf_units:
-            with st.container(border=True):
-                st.markdown(f"**{unit['name']}**")
-                st.caption(f"Official NDRF unit · {unit['distance_km']:.1f} km from incident (straight-line to geocoded address)")
-                st.write(unit["address"])
-                if unit.get("phone"):
-                    st.write(f"**Listed telephone:** {unit['phone']}")
-                if unit.get("control_room"):
-                    st.write(f"**Control room:** {unit['control_room']}")
-                if unit.get("email"):
-                    st.write(f"**Email:** {unit['email']}")
-                st.markdown(f"[Open official NDRF directory]({unit['source_url']})")
-        st.warning(
-            "These are public unit-directory contacts, not confirmation that a rescue team is currently nearby, "
-            "available, or dispatched. Call the listed control room to verify operational status."
-        )
-    else:
-        st.info("The official NDRF directory returned no units with geocodable addresses for this lookup.")
-else:
-    st.info("Add valid incident coordinates to rank official NDRF units by distance.")
-
-st.markdown("### Nearest rescue teams")
-st.caption(
-    "Closest teams are listed first using the incident's saved coordinates. Only records marked as "
-    "operator-verified, official, or from a trusted live feed are shown. Distances are straight-line "
-    "estimates—not driving times—and a listing does not mean the team is available or dispatched."
-)
-verified_resources = [
-    resource for resource in center.resources
-    if resource.get("source") in {"operator-verified-upload", "trusted-live-feed", "official-feed"}
-]
-resource_rows = []
-if lat is not None and lon is not None:
-    for resource in verified_resources:
-        try:
-            if resource.get("lat") is None or resource.get("lon") is None:
-                continue
-            resource_rows.append({
-                "id": str(resource.get("id") or ""),
-                "name": str(resource.get("name") or resource.get("id") or "Unnamed team"),
-                "type": str(resource.get("type") or "Rescue team").replace("_", " ").title(),
-                "status": str(resource.get("status") or "Status unknown"),
-                "distance_km": _distance_km(float(lat), float(lon), float(resource["lat"]), float(resource["lon"])),
-                "phone": str(resource.get("phone") or resource.get("contact_phone") or "").strip(),
-                "capacity": resource.get("capacity"),
-                "capabilities": resource.get("capabilities") or [],
-            })
-        except (TypeError, ValueError):
-            continue
-
-resource_rows.sort(key=lambda row: row["distance_km"])
-resource_rows = resource_rows[:10]
-if lat is None or lon is None:
-    st.warning("This incident has no usable coordinates, so nearest rescue teams cannot be ranked.")
-elif resource_rows:
-    st.caption(f"{len(resource_rows)} verified resource record(s) found · sorted nearest first.")
-    for resource in resource_rows:
-        with st.container(border=True):
-            st.markdown(f"**{resource['name']}**")
-            st.caption(
-                f"{resource['type']} · {resource['distance_km']:.1f} km away "
-                f"(straight-line) · ID {resource['id'] or 'not listed'}"
-            )
-            st.write(f"**Status:** {resource['status']}")
-            capabilities = resource["capabilities"]
-            if isinstance(capabilities, (list, tuple, set)):
-                capability_text = ", ".join(str(item) for item in capabilities)
-            else:
-                capability_text = str(capabilities).strip()
-            if resource["capacity"] is not None:
-                st.write(f"**Recorded capacity:** {resource['capacity']}")
-            if capability_text:
-                st.write(f"**Capabilities:** {capability_text}")
-            if resource["phone"]:
-                st.write(f"**Listed contact:** {resource['phone']}")
-                st.link_button(
-                    "Call rescue team",
-                    f"tel:{resource['phone']}",
-                    key=f"call_rescue_{resource['id'] or resource['name']}",
-                )
-            else:
-                st.write("**Listed contact:** Not available")
-            st.caption("Source: connected resource inventory · confirm this team's current status and location with the coordinator before dispatch.")
-    st.warning(
-        "Distance is straight-line, not road travel distance. Confirm the team's status, location, capability, "
-        "and availability with the responsible coordinator before dispatch."
-    )
-else:
-    st.info(
-        "No verified rescue-team records with usable coordinates were found for this incident. "
-        "This does not mean no teams exist nearby. Connect an operator-verified inventory or trusted "
-        "official feed with team name, coordinates, status, capabilities, and contact details. "
-        "Public station listings above are separate directory leads, not confirmed dispatch-ready teams."
-    )
 
 if is_unclassified:
     st.warning(
