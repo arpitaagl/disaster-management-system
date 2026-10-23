@@ -135,3 +135,119 @@ def nearby_major_hospitals(lat: Any, lon: Any, limit: int = 5) -> tuple[list[dic
         seen.add(key)
         selected.append(record)
     return selected[:max(0, min(int(limit), 5))], None
+
+
+
+NDRF_UNITS_URL = "https://www.ndrf.gov.in/ndrf-units"
+
+
+@st.cache_data(ttl=86400, show_spinner=False)
+def _geocode_ndrf_address(address: str) -> tuple[float, float] | None:
+    """Geocode an address published in the official NDRF unit directory."""
+    if not address.strip():
+        return None
+    headers = {"User-Agent": "ResQ-AI public directory lookup/1.0"}
+    try:
+        response = requests.get(
+            "https://photon.komoot.io/api/",
+            params={"q": address, "limit": 1},
+            headers=headers,
+            timeout=(3, 8),
+        )
+        response.raise_for_status()
+        features = response.json().get("features") or []
+        if features:
+            coords = features[0].get("geometry", {}).get("coordinates") or []
+            if len(coords) >= 2:
+                lon_f, lat_f = float(coords[0]), float(coords[1])
+                if -90 <= lat_f <= 90 and -180 <= lon_f <= 180:
+                    return lat_f, lon_f
+    except (requests.RequestException, ValueError, TypeError, IndexError):
+        return None
+    return None
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def _fetch_official_ndrf_units() -> tuple[list[dict[str, Any]], str | None]:
+    """Read unit contacts from NDRF's official public website; not live deployment status."""
+    import pandas as pd
+
+    try:
+        response = requests.get(
+            NDRF_UNITS_URL,
+            headers={"User-Agent": "ResQ-AI official public directory reader/1.0"},
+            timeout=(4, 12),
+        )
+        response.raise_for_status()
+        tables = pd.read_html(response.text)
+    except (requests.RequestException, ValueError, ImportError) as exc:
+        return [], f"Official NDRF directory is temporarily unavailable ({type(exc).__name__})."
+
+    records: list[dict[str, Any]] = []
+    for table in tables:
+        table.columns = [str(col).strip().casefold() for col in table.columns]
+        unit_col = next((col for col in table.columns if "unit" in col or "battalion" in col), None)
+        address_col = next((col for col in table.columns if "address" in col), None)
+        phone_col = next((col for col in table.columns if "telephone" in col or "phone" in col), None)
+        control_col = next((col for col in table.columns if "control room" in col), None)
+        email_col = next((col for col in table.columns if "e-mail" in col or "email" in col), None)
+        if not unit_col or not address_col:
+            continue
+        for _, row in table.iterrows():
+            name = str(row.get(unit_col, "")).strip()
+            address = str(row.get(address_col, "")).strip()
+            if not name or name.casefold() in {"nan", "unit", "battalion"} or not address or address.casefold() == "nan":
+                continue
+            phone = str(row.get(phone_col, "")).strip() if phone_col else ""
+            control = str(row.get(control_col, "")).strip() if control_col else ""
+            email = str(row.get(email_col, "")).strip() if email_col else ""
+            records.append({
+                "name": name,
+                "address": address,
+                "phone": "" if phone.casefold() == "nan" else phone,
+                "control_room": "" if control.casefold() == "nan" else control,
+                "email": "" if email.casefold() == "nan" else email,
+                "source_url": NDRF_UNITS_URL,
+            })
+    # De-duplicate tables/rows that some CMS pages expose more than once.
+    deduped = {}
+    for record in records:
+        deduped[record["name"].casefold()] = record
+    if not deduped:
+        return [], "The official NDRF page loaded, but its unit table format was not recognized."
+    return list(deduped.values()), None
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def nearby_official_ndrf_units(lat: Any, lon: Any, limit: int = 5) -> tuple[list[dict[str, Any]], str | None]:
+    """Return nearest geocoded NDRF headquarters from its official public unit directory.
+
+    The source confirms public unit contact/address details only; it does not expose
+    live team position, readiness, or dispatch availability.
+    """
+    try:
+        incident_lat, incident_lon = float(lat), float(lon)
+    except (TypeError, ValueError):
+        return [], "Incident coordinates are missing or invalid; NDRF units cannot be ranked."
+    if not (-90 <= incident_lat <= 90 and -180 <= incident_lon <= 180):
+        return [], "Incident coordinates are outside valid latitude/longitude ranges."
+    records, error = _fetch_official_ndrf_units()
+    if error:
+        return [], error
+    nearby = []
+    for record in records:
+        coords = _geocode_ndrf_address(record["address"])
+        if not coords:
+            continue
+        unit_lat, unit_lon = coords
+        distance = haversine_km(incident_lat, incident_lon, unit_lat, unit_lon)
+        nearby.append({
+            **record,
+            "lat": unit_lat,
+            "lon": unit_lon,
+            "distance_km": round(distance, 1),
+            "type": "Official NDRF unit directory",
+            "source": "Official NDRF public website",
+        })
+    nearby.sort(key=lambda item: item["distance_km"])
+    return nearby[:max(0, min(int(limit), 10))], None
