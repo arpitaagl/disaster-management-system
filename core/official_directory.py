@@ -124,11 +124,30 @@ def nearby_major_hospitals(lat: Any, lon: Any, limit: int = 5) -> tuple[list[dic
         name = str(record.get("name") or "").strip()
         phone = str(record.get("phone") or "").strip()
         facility_type = str(record.get("facility_type") or "").strip()
+        address = str(record.get("address") or "").strip()
+        district = str(record.get("district") or "").strip()
+        state = str(record.get("state") or "").strip()
         name_key, type_key = name.casefold(), facility_type.casefold()
-        if not name or any(term in type_key for term in excluded):
+
+        # Only show actionable directory entries: a real-looking listed phone
+        # number and a sufficiently complete address. Never fill missing fields
+        # with guessed contact details.
+        digits = "".join(character for character in phone if character.isdigit())
+        placeholder_phone = phone.casefold() in {
+            "", "n/a", "na", "not available", "not listed", "none", "null", "nan", "-"
+        }
+        if not name or placeholder_phone or len(digits) < 7:
             continue
-        if not (any(term in type_key for term in major_terms) or any(term in name_key for term in major_terms)):
+        if not address or not state:
             continue
+        if any(term in type_key for term in excluded):
+            continue
+        if not (
+            any(term in type_key for term in major_terms)
+            or any(term in name_key for term in major_terms)
+        ):
+            continue
+
         key = name_key
         if key in seen:
             continue
