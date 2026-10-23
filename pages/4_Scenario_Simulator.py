@@ -274,12 +274,12 @@ else:
     elif not major_hospitals:
         st.info(
             "No major hospital records with a listed phone number were found in the public directory "
-            "within 20 km. ResQ-AI will not substitute small clinics or invent contact details. "
+            "within 50 km. ResQ-AI will not substitute small clinics or invent contact details. "
             "Contact local emergency services directly."
         )
     else:
         st.caption(
-            f"Showing {len(major_hospitals)} major hospital(s) within 20 km, nearest first, "
+            f"Showing {len(major_hospitals)} major hospital(s) within 50 km, nearest first, "
             "with phone numbers listed in the public directory."
         )
         for hospital in major_hospitals:
