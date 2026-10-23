@@ -177,7 +177,7 @@ def generate_incident_brief(
                 credentials["aws_session_token"] = aws_session_token
         response = boto3.client("bedrock-runtime", region_name=region, **credentials).converse(
             modelId=model_id,
-            system=[{"text": f"You are a disaster-response briefing assistant. Use only supplied {source_note}. Do not invent facts, claim live feeds, or authorize dispatch. Clearly state uncertainty and that a human coordinator must decide. Deterministic priority scores in the input must not be changed."}],
+            system=[{"text": f"You are a disaster-response briefing assistant. Use only supplied data; explicitly label simulated data when demo mode is active, and identify current application session data otherwise. Do not invent facts, claim live feeds, or authorize dispatch. Clearly state uncertainty and that a human coordinator must decide. Deterministic priority scores in the input must not be changed."}],
             messages=[{"role": "user", "content": [{"text": _deterministic_brief(center)}]}],
             inferenceConfig={"maxTokens": 500, "temperature": 0.1},
         )
