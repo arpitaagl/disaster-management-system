@@ -230,36 +230,73 @@ st.caption("India hospital reference directory · nearest first · straight-line
 if lat is None or lon is None:
     st.warning("This incident has no usable coordinates, so nearby hospitals cannot be searched.")
 else:
-    with st.spinner("Searching the India hospital directory near the incident…"):
-        nearby_hospitals, hospital_lookup_error = nearby_public_hospitals(lat, lon, limit=10)
+    with st.spinner("Finding major hospitals with listed contact numbers…"):
+        hospital_records, hospital_lookup_error = nearby_public_hospitals(lat, lon, limit=100)
     if hospital_lookup_error:
         st.warning(f"{hospital_lookup_error} Retry shortly. No hospital names or phone numbers have been fabricated.")
-    elif not nearby_hospitals:
-        st.info("The public hospital directory returned no nearby records for this location. This does not prove that no hospitals exist nearby.")
     else:
-        st.caption(f"Showing {len(nearby_hospitals)} hospital/health-facility record(s) within 50 km, sorted by distance.")
-        for hospital in nearby_hospitals:
-            with st.container(border=True):
-                st.markdown(f"**{hospital.get('name') or 'Unnamed health facility'}**")
-                st.caption(
-                    f"{hospital.get('facility_type') or 'Health facility'} · "
-                    f"{hospital.get('distance_km', '—')} km away (straight-line)"
-                )
-                address = ", ".join(
-                    part for part in [
-                        str(hospital.get("address") or "").strip(),
-                        str(hospital.get("district") or "").strip(),
-                        str(hospital.get("state") or "").strip(),
-                    ] if part
-                )
-                st.write(address or "Address not listed in the public directory.")
-                phone = str(hospital.get("phone") or "").strip()
-                if phone:
-                    st.write(f"**Contact:** {phone}")
-                    st.link_button("Call hospital", f"tel:{phone}")
-                else:
-                    st.caption("Phone number not listed in the public directory.")
-                st.caption("Source: India hospital reference directory. Call to verify details and availability.")
+        # Exclude small primary-care points and records without a contact number.
+        # Keep only hospital-level facilities with a named record and a listed phone.
+        excluded_facility_terms = (
+            "subcentre", "sub center", "sub-centre", "primary health centre",
+            "primary health center", "dispensary", "clinic", "urban health centre",
+            "urban health center", "health sub-centre", "health sub center",
+        )
+        major_facility_terms = (
+            "hospital", "medical college", "aiims", "institute of medical sciences",
+            "super speciality", "super specialty", "tertiary care",
+        )
+        major_hospitals = []
+        for hospital in hospital_records:
+            name = str(hospital.get("name") or "").strip()
+            facility_type = str(hospital.get("facility_type") or "").strip()
+            phone = str(hospital.get("phone") or "").strip()
+            searchable_type = facility_type.casefold()
+            searchable_name = name.casefold()
+            if not name or not phone:
+                continue
+            if any(term in searchable_type for term in excluded_facility_terms):
+                continue
+            if not (
+                any(term in searchable_type for term in major_facility_terms)
+                or any(term in searchable_name for term in major_facility_terms)
+            ):
+                continue
+            major_hospitals.append(hospital)
+
+        major_hospitals = major_hospitals[:5]
+        if not major_hospitals:
+            st.info(
+                "No major hospital records with a listed phone number were found in the public directory "
+                "within 50 km. ResQ-AI will not substitute small clinics or invent contact details. "
+                "Contact local emergency services directly."
+            )
+        else:
+            st.caption(
+                f"Showing {len(major_hospitals)} major hospital(s) within 50 km, nearest first, "
+                "with phone numbers listed in the public directory."
+            )
+            for hospital in major_hospitals:
+                with st.container(border=True):
+                    st.markdown(f"**{hospital.get('name')}**")
+                    st.caption(
+                        f"{hospital.get('facility_type') or 'Hospital'} · "
+                        f"{hospital.get('distance_km', '—')} km away (straight-line)"
+                    )
+                    address = ", ".join(
+                        part for part in [
+                            str(hospital.get("address") or "").strip(),
+                            str(hospital.get("district") or "").strip(),
+                            str(hospital.get("state") or "").strip(),
+                        ] if part
+                    )
+                    st.write(address or "Address not listed in the public directory.")
+                    st.write(f"**Listed contact:** {hospital['phone']}")
+                    st.link_button("Call hospital", f"tel:{hospital['phone']}")
+                    st.caption(
+                        "Source: India hospital reference directory. The number is publicly listed but "
+                        "has not been independently phone-verified by ResQ-AI; call to confirm."
+                    )
 
 st.markdown("### Nearby emergency response stations")
 st.caption("Fire, police and ambulance facilities are shown as public-directory leads, not as confirmed dispatch-ready teams.")
